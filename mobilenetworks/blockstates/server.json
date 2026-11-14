@@ -1,7 +1,0 @@
-{
-  "variants": {
-    "": {
-      "model": "mobilenetworks:block/server"
-    }
-  }
-}
