@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "mobilecellnetwork:block/server_block"
+    }
+  }
+}

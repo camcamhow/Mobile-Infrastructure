@@ -1,0 +1,71 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - mobilecellnetwork",
+        "order": 0
+      },
+      "projectName": "mobilecellnetwork",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\Mobile Infrastructure\\build\\moddev\\clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\Mobile Infrastructure\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dmobilecellnetwork%%D:\\Mobile Infrastructure\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Data",
+      "presentation": {
+        "group": "Mod Development - mobilecellnetwork",
+        "order": 1
+      },
+      "projectName": "mobilecellnetwork",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\Mobile Infrastructure\\build\\moddev\\dataRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\Mobile Infrastructure\\build\\moddev\\dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003dmobilecellnetwork%%D:\\Mobile Infrastructure\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - mobilecellnetwork",
+        "order": 2
+      },
+      "projectName": "mobilecellnetwork",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\Mobile Infrastructure\\build\\moddev\\serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\Mobile Infrastructure\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dmobilecellnetwork%%D:\\Mobile Infrastructure\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}

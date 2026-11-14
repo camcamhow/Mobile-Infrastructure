@@ -1,0 +1,280 @@
+[coverage]
+	#Maximum signal radius, in blocks, for each antenna tier.
+	# Default: 256
+	# Range: 1 ~ 4096
+	copperAntennaRange = 256
+	# Default: 512
+	# Range: 1 ~ 4096
+	ironAntennaRange = 512
+	# Default: 1024
+	# Range: 1 ~ 4096
+	diamondAntennaRange = 1024
+	#Show the coverage-radius preview while holding an antenna.
+	towerPlacementPreviewEnabled = true
+	#Maximum distance in blocks for aiming the antenna placement preview.
+	# Default: 10
+	# Range: 1 ~ 32
+	towerPlacementPreviewMaxDistance = 10
+	#Allows nearby antennas to relay coverage through mesh links.
+	allowMeshSharing = true
+	#When enabled, show emergency calling as the primary option without service.
+	emergencyOnlyWhenNoService = true
+	#If false, antennas work without FE. If true, they need stored energy to provide service.
+	requireEnergy = true
+	#Maximum FE energy storage for each antenna tier.
+	# Default: 10000
+	# Range: > 1
+	antennaCapacity_COPPER = 10000
+	# Default: 25000
+	# Range: > 1
+	antennaCapacity_IRON = 25000
+	# Default: 50000
+	# Range: > 1
+	antennaCapacity_DIAMOND = 50000
+	#Maximum FE that each antenna tier can receive per tick.
+	# Default: 100
+	# Range: > 1
+	antennaMaxReceive_COPPER = 100
+	# Default: 400
+	# Range: > 1
+	antennaMaxReceive_IRON = 400
+	# Default: 1000
+	# Range: > 1
+	antennaMaxReceive_DIAMOND = 1000
+	#FE consumed per second by each antenna tier while operating.
+	# Default: 100
+	# Range: > 0
+	antennaDrawFePerSecond_COPPER = 100
+	# Default: 400
+	# Range: > 0
+	antennaDrawFePerSecond_IRON = 400
+	# Default: 1600
+	# Range: > 0
+	antennaDrawFePerSecond_DIAMOND = 1600
+	#Scales an antenna's configured range while it is in low-power mode.
+	# Default: 0.5
+	# Range: 0.0 ~ 1.0
+	lowPowerRangeMultiplier = 0.5
+	#Highest signal tier allowed while an antenna itself is in low-power mode.
+	#Allowed Values: FIVE_G_PLUS, FIVE_G, FOUR_G_PLUS, FOUR_G, LTE, THREE_G, H_PLUS, H, TWO_G, E_PLUS, E, NO_SERVICE
+	lowPowerMaxTier = "TWO_G"
+	#Ticks to keep an antenna's chunk loaded after its last user leaves. 20 ticks = 1 second.
+	# Default: 200
+	# Range: > 0
+	antennaChunkLoadGraceTicks = 200
+	#Maximum charge stored in a phone item, in charge units.
+	# Default: 10000
+	# Range: 1 ~ 10000
+	phoneMaxCharge = 10000
+	#Phone charge consumed per second during normal operation.
+	# Default: 1
+	# Range: > 0
+	phoneDrainPerSecond = 1
+	#Multiplies phone drain while low-power mode is active.
+	# Default: 4.0
+	# Range: 1.0 ~ 100.0
+	flashlightDrainMultiplier = 4.0
+	# Default: 5.0
+	# Range: 1.0 ~ 100.0
+	lowPowerDrainMultiplier = 5.0
+	#Maximum FE stored by a phone charger block.
+	# Default: 20000
+	# Range: > 1
+	chargerFeCapacity = 20000
+	#Maximum FE the charger can receive from adjacent energy sources per tick.
+	# Default: 200
+	# Range: > 1
+	chargerFeMaxReceivePerTick = 200
+	#FE consumed by the charger per tick while charging a phone.
+	# Default: 40
+	# Range: > 0
+	chargerFeDrawPerTick = 40
+	#Phone charge units added per tick while a phone is on the charger.
+	# Default: 50
+	# Range: > 1
+	chargerChargeRatePerTick = 50
+	#Formula used to reduce signal strength with distance. INVERSE is gradual; LINEAR and QUADRATIC fall off faster; STEPPED changes in bands.
+	#Allowed Values: INVERSE, LINEAR, QUADRATIC, STEPPED
+	signalFalloffMode = "INVERSE"
+	#Controls the steepness of INVERSE distance falloff. Higher values weaken signal faster.
+	# Default: 4.0
+	# Range: 0.0 ~ 1000.0
+	inverseFalloffK = 4.0
+	#Hard cutoff multiplier beyond the antenna range. For example, 2.5 allows signal calculations up to 2.5 times range.
+	# Default: 2.5
+	# Range: 1.0 ~ 100.0
+	inverseMaxRangeMultiplier = 2.5
+	#How much sampled block obstruction subtracts from raw signal strength. LOS loss = sampled attenuation x this value.
+	# Default: 0.01
+	# Range: 0.0 ~ 100.0
+	losWeight = 0.01
+	#Spacing in blocks between line-of-sight obstruction samples. Smaller values inspect more blocks.
+	# Default: 2.0
+	# Range: 0.1 ~ 64.0
+	losSampleInterval = 2.0
+	#Maximum line-of-sight samples per signal check. If the path needs more, sampled attenuation is scaled to compensate.
+	# Default: 64
+	# Range: 1 ~ 4096
+	losMaxSamples = 64
+	#Signal attenuation added by blocks in the matching signal_attenuation tags. Air uses no attenuation.
+	# Default: 0.0
+	# Range: 0.0 ~ 1000.0
+	attenuationNone = 0.0
+	# Default: 0.5
+	# Range: 0.0 ~ 1000.0
+	attenuationLow = 0.5
+	# Default: 1.5
+	# Range: 0.0 ~ 1000.0
+	attenuationMedium = 1.5
+	# Default: 3.0
+	# Range: 0.0 ~ 1000.0
+	attenuationHigh = 3.0
+	# Default: 8.0
+	# Range: 0.0 ~ 1000.0
+	attenuationBlocking = 8.0
+	#Attenuation assigned to blocks not included in any signal_attenuation tag.
+	# Default: 1.0
+	# Range: 0.0 ~ 1000.0
+	unknownBlockAttenuation = 1.0
+	#Minimum raw signal-strength values for each signal tier. Values are from 0.0 to 1.0; higher entries are better tiers.
+	signalThresholds = ["FIVE_G_PLUS=0.90", "FIVE_G=0.80", "FOUR_G_PLUS=0.70", "FOUR_G=0.60", "LTE=0.50", "THREE_G=0.40", "H_PLUS=0.30", "H=0.20", "TWO_G=0.10", "E_PLUS=0.05"]
+	#Includes distance and obstruction diagnostics in server-side signal logging/debug output.
+	debugSignalInfo = false
+	#Highest phone signal tier while the phone is in low-power mode.
+	#Allowed Values: FIVE_G_PLUS, FIVE_G, FOUR_G_PLUS, FOUR_G, LTE, THREE_G, H_PLUS, H, TWO_G, E_PLUS, E, NO_SERVICE
+	lowPowerMaxSignalTier = "E_PLUS"
+	#Fraction of the current tier's signal range required to display 4 bars.
+	# Default: 0.8
+	# Range: 0.0 ~ 1.0
+	signalBars4Threshold = 0.8
+	#Fraction of the current tier's signal range required to display 3 bars.
+	# Default: 0.55
+	# Range: 0.0 ~ 1.0
+	signalBars3Threshold = 0.55
+	#Fraction of the current tier's signal range required to display 2 bars.
+	# Default: 0.3
+	# Range: 0.0 ~ 1.0
+	signalBars2Threshold = 0.3
+	#Fraction of the current tier's signal range required to display 1 bar.
+	# Default: 0.0
+	# Range: 0.0 ~ 1.0
+	signalBars1Threshold = 0.0
+
+[chat]
+	#Restricts configured player-to-player chat commands when a player has no mobile service.
+	chatLockEnabled = true
+	#Permission node that bypasses the chat service restriction.
+	chatLockBypassPermission = "mobilecellnetwork.bypasschat"
+	#Chat command names disabled by the mobile service restriction.
+	blockedCommands = ["msg", "tell", "w", "whisper", "m", "pm", "dm"]
+	#Commands exempt from chat service restrictions.
+	whitelistedCommands = ["help", "tp", "gamemode", "give", "me"]
+	#Enables system chat messages generated by the mod.
+	systemMessagesEnabled = true
+
+[phone]
+	#Default smartphone operating-system style for new or previously unset phone profiles.
+	#Allowed Values: SAMSUNG_ONE_UI, IOS, DEFAULT
+	defaultPhoneStyle = "SAMSUNG_ONE_UI"
+	#Enables low-power mode, which can reduce phone drain and restrict apps.
+	lowPowerEnabled = true
+	#App IDs permitted while low-power mode is active.
+	lowPowerAllowedApps = ["sms", "map", "settings"]
+	#Charge percentage at or below which the low-power prompt appears.
+	# Default: 10
+	# Range: 1 ~ 100
+	lowPowerAutoPromptThreshold = 10
+	#Ends an active call when low-power mode is enabled.
+	lowPowerDropActiveCall = true
+	#Extra map data-use divisor while low-power mode is active. Larger values use less data.
+	# Default: 4
+	# Range: 1 ~ 64
+	mapResolutionDivisor = 4
+	#Allows emergency calling when the phone battery is depleted.
+	deadPhoneAllowsEmergency = false
+	#Default plan text allowance. A value of 0 disables texts; negative plan-specific allowances mean unlimited.
+	# Default: 100
+	# Range: > 0
+	defaultPlanTextLimit = 100
+	#Default plan call-minute allowance. A value of 0 disables call minutes.
+	# Default: 60
+	# Range: > 0
+	defaultPlanMinuteLimit = 60
+	#How long an incoming call rings before it times out, in seconds.
+	# Default: 30
+	# Range: 1 ~ 3600
+	callRingTimeoutSeconds = 30
+	#Prevents proximity voice chat from working unless players are on a phone call.
+	blockProximityVoiceOutsideCalls = true
+	#Sound resource location played for an incoming call.
+	ringtoneSound = "minecraft:block.note_block.bell"
+	#Sound resource location played when a call ends.
+	callEndSound = "minecraft:block.note_block.bass"
+	#Maximum stored SMS messages per conversation thread.
+	# Default: 100
+	# Range: 1 ~ 10000
+	maxMessagesPerThread = 100
+	#Maximum characters allowed in one SMS message.
+	# Default: 160
+	# Range: 1 ~ 1000
+	smsMaxLength = 160
+	#Sound resource location played when an SMS is received.
+	smsNotificationSound = "minecraft:block.note_block.hat"
+
+[billing]
+	#Enables automatic plan renewals and related billing behavior.
+	billingEnabled = true
+	#Days before renewal to send payment reminders. Each interval is sent once per billing cycle.
+	renewalReminderDays = [7, 3, 1]
+	#Legacy single reminder interval, used only if renewalReminderDays is empty.
+	# Default: 1
+	# Range: 0 ~ 365
+	daysBeforeRenewalWarning = 1
+	#Downgrades a player when their automatic plan renewal payment fails.
+	downgradeOnFailedRenewal = true
+
+[roaming]
+	#Legacy default for older per-antenna roaming policies. Paid carrier roaming requires bilateral network approval.
+	#Allowed Values: DENY_ALL, ALLOW_ALL, WHITELIST_PLAYERS, WHITELIST_NETWORKS, PAID_ROAMING, INHERIT
+	defaultAntennaRoamingPolicy = "DENY_ALL"
+	#Legacy default for older network roaming policies. Paid carrier roaming requires bilateral network approval.
+	#Allowed Values: DENY_ALL, ALLOW_ALL, WHITELIST_PLAYERS, WHITELIST_NETWORKS, PAID_ROAMING, INHERIT
+	defaultNetworkRoamingPolicy = "DENY_ALL"
+	#Enables charging roaming fees for paid-roaming connections.
+	roamingFeeEnabled = true
+	#Legacy roaming payout setting retained for compatibility; revenue now uses roamingRevenueSplitHome.
+	# Default: 60
+	# Range: 0 ~ 100
+	roamingHostSharePercent = 60
+	#Fraction of roaming revenue allocated to the subscriber's home network; the rest goes to the host network.
+	# Default: 0.5
+	# Range: 0.0 ~ 1.0
+	roamingRevenueSplitHome = 0.5
+	#Minimum password length accepted for new network passwords.
+	# Default: 4
+	# Range: 1 ~ 64
+	minimumNetworkPasswordLength = 4
+	#Default roaming rates used when a network is first initialized.
+	defaultRoamingRatePerMinute = 5
+	defaultRoamingRatePerText = 1
+	defaultRoamingRatePerMb = 1
+	#New networks automatically send roaming proposals to other networks.
+	autoSendRoamingRequestsDefault = false
+	#Permit antenna networks to operate without an assigned online server block.
+	allowNetworkWithoutServerBlock = false
+	#Minimum seconds between roaming notifications sent to one player.
+	# Default: 300
+	# Range: > 0
+	roamingNotificationCooldownSeconds = 300
+	#Maximum characters accepted in an emergency message.
+	# Default: 280
+	# Range: 1 ~ 4096
+	emergencyMessageMaxLength = 280
+
+[currency]
+	#Currency symbol used in prices and balances.
+	currencySymbol = "$"
+	#Singular name for one unit of currency.
+	currencyName = "dollar"
+	#Plural name for currency amounts other than one.
+	currencyNamePlural = "dollars"
