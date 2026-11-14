@@ -40,6 +40,25 @@ public final class DeviceSettingsScreen extends Screen implements PhoneNavigable
         addRenderableWidget(Button.builder(Component.literal("Manage devices"),
                 button -> minecraft.setScreen(new ManageDevicesScreen(menu)))
                 .bounds(buttonX, top + 190, buttonWidth, 22).build());
+        addRenderableWidget(Button.builder(Component.literal("Factory reset"),
+                button -> confirmFactoryReset())
+                .bounds(buttonX, top + 220, buttonWidth, 22).build());
+    }
+
+    private void confirmFactoryReset() {
+        java.util.UUID id = PhoneDeviceClientCache.phoneId();
+        if (id == null) {
+            minecraft.player.displayClientMessage(Component.literal("No active phone to reset."), true);
+            return;
+        }
+        minecraft.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed -> {
+            minecraft.setScreen(this);
+            if (confirmed) {
+                PacketDistributor.sendToServer(new com.example.mobilecellnetwork.network.PhoneFactoryResetPacket(id));
+            }
+        }, Component.literal("Factory reset this phone?"),
+                Component.literal("Erase photos, messages, contacts, settings and PIN. The number and plan remain."),
+                Component.literal("Erase phone"), Component.literal("Cancel")));
     }
 
     @Override

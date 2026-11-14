@@ -113,8 +113,10 @@ public final class MapScreen extends Screen implements PhoneNavigableScreen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             // No service gating: show overlay if no active plan and screen is not exempt
             if (ClientPhoneCache.planId().isBlank()) {
+                PhoneFrame.render(graphics, this);
                 NoServiceOverlay.render(graphics, ClientPhoneCache.phoneStyle(), PhoneFrame.getScreenX(this),
-                        PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH(), "Map", font);
+                        PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24, "Map", font);
+                PhoneFrame.renderStatusBar(graphics, this);
                 return;
             }
             PhoneFrame.render(graphics, this);

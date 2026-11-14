@@ -148,6 +148,24 @@ public final class PhoneDeviceSavedData extends SavedData {
         return Map.copyOf(result);
     }
 
+    public boolean deletePhoto(UUID phoneId, String name) {
+        DeviceRecord device = devices.get(phoneId);
+        if (device == null || name == null || !name.matches("[A-Za-z0-9_.-]{1,128}")
+                || device.photos.remove(name) == null) {
+            return false;
+        }
+        setDirty();
+        return true;
+    }
+
+    public void clearPhotos(UUID phoneId) {
+        DeviceRecord device = devices.get(phoneId);
+        if (device != null) {
+            device.photos.clear();
+            setDirty();
+        }
+    }
+
     public CompoundTag wipeProfile(UUID phoneId, HolderLookup.Provider registries) {
         DeviceRecord device = devices.get(phoneId);
         if (device == null) {

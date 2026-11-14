@@ -35,6 +35,7 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
     private boolean confirmingCancel;
     private String awaitingPlanId;
     private long awaitingSince;
+    private String selectionMessage = "";
 
     public PlanScreen(PhoneMenu menu) {
         super(Component.literal("Plan"));
@@ -50,7 +51,7 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
     public void navigateBack() {
         if (confirmingCancel) {
             confirmingCancel = false;
-        } else if (choosing && chooserStep == ChooserStep.PLAN) {
+        } else if (chooserMode() && chooserStep == ChooserStep.PLAN) {
             chooserStep = ChooserStep.NETWORK;
             scroll = 0;
         } else if (choosing && hasActivePlan()) {
@@ -73,6 +74,13 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
         return choosing || !hasActivePlan();
     }
 
+    public void selectionResult(String message) {
+        if (awaitingPlanId != null && !"Plan activated.".equals(message)) {
+            awaitingPlanId = null;
+            selectionMessage = message;
+        }
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         PlanSyncPacket state = ClientPlanCache.snapshot();
@@ -84,6 +92,7 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                 scroll = 0;
             } else if (System.currentTimeMillis() - awaitingSince > SELECT_TIMEOUT_MS) {
                 awaitingPlanId = null;
+                selectionMessage = "Not activated. Check notifications.";
             }
         }
         if (!hasActivePlan() && !chooserInitialized) {
@@ -95,9 +104,8 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
         PhoneFrame.renderPanel(graphics, left, top, PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24);
         PhoneStyle style = ClientPhoneCache.phoneStyle();
         if (chooserMode()) {
-            String title = chooserStep == ChooserStep.NETWORK ? "Choose a network"
-                    : "Plans on " + networkName(state, selectedNetworkId);
-            PhoneFrame.renderHeader(graphics, this, font.plainSubstrByWidth(title, 130), true);
+            PhoneFrame.renderHeader(graphics, this,
+                    chooserStep == ChooserStep.NETWORK ? "Choose network" : "Choose plan", true);
             if (chooserStep == ChooserStep.NETWORK) {
                 renderNetworks(graphics, style, state, left, top);
             } else {
@@ -122,10 +130,14 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
 
     private void renderNetworks(GuiGraphics graphics, PhoneStyle style, PlanSyncPacket state, int left, int top) {
         List<PlanSyncPacket.NetworkEntry> networks = state.networks();
+        drawText(graphics, style, "SELECT YOUR CARRIER", left + 14, top + 48, 174,
+                PhoneColors.textSecondary(style));
         if (networks.isEmpty()) {
-            PhoneRenderer.drawCard(graphics, style, left + 8, top + 70, 188, 58);
-            graphics.drawCenteredString(font, "No networks are available",
-                    left + 102, top + 91, PhoneColors.textSecondary(style));
+            PhoneRenderer.drawCard(graphics, style, left + 8, top + 70, 188, 72);
+            drawText(graphics, style, "No networks available", left + 18, top + 84, 168,
+                    PhoneColors.textPrimary(style));
+            drawText(graphics, style, "Create a network at a server.", left + 18, top + 103, 168,
+                    PhoneColors.textSecondary(style));
             return;
         }
         int first = clampScroll(networks.size(), NETWORK_VISIBLE);
@@ -133,14 +145,15 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
             PlanSyncPacket.NetworkEntry network = networks.get(index);
             int y = top + 62 + (index - first) * NETWORK_ROW;
             PhoneRenderer.drawCard(graphics, style, left + 8, y, 188, 40);
-            graphics.drawString(font, font.plainSubstrByWidth(network.name(), 174),
-                    left + 14, y + 8, PhoneColors.textPrimary(style), true);
-            String subtitle = "Owner: " + network.ownerName() + " - " + network.antennaCount()
-                    + (network.antennaCount() == 1 ? " antenna" : " antennas")
-                    + " - Roaming: " + (network.allowRoaming() ? "on" : "off");
-            graphics.drawString(font, font.plainSubstrByWidth(subtitle, 174),
-                    left + 14, y + 23, PhoneColors.textSecondary(style), true);
+            McnPrimitives.fillRoundedRect(graphics, left + 14, y + 8, 24, 24, 8, PhoneColors.accent(style));
+            drawText(graphics, style, "NET", left + 16, y + 15, 20, PhoneColors.buttonTextOnAccent(style));
+            drawText(graphics, style, network.name(), left + 44, y + 7, 132, PhoneColors.textPrimary(style));
+            drawText(graphics, style, network.antennaCount() + " towers  |  "
+                    + (network.allowRoaming() ? "Roaming" : "Local"), left + 44, y + 23, 132,
+                    PhoneColors.textSecondary(style));
+            drawText(graphics, style, ">", left + 181, y + 15, 8, PhoneColors.textSecondary(style));
         }
+        renderPager(graphics, style, left, top, first, networks.size(), NETWORK_VISIBLE);
     }
 
     private List<PlanSyncPacket.PlanEntry> plansOnSelectedNetwork(PlanSyncPacket state) {
@@ -149,10 +162,14 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
 
     private void renderPlans(GuiGraphics graphics, PhoneStyle style, PlanSyncPacket state, int left, int top) {
         List<PlanSyncPacket.PlanEntry> plans = plansOnSelectedNetwork(state);
+        drawText(graphics, style, "Carrier: " + networkName(state, selectedNetworkId),
+                left + 14, top + 48, 174, PhoneColors.textSecondary(style));
         if (plans.isEmpty()) {
             PhoneRenderer.drawCard(graphics, style, left + 8, top + 70, 188, 58);
-            graphics.drawCenteredString(font, "No plans on this network",
-                    left + 102, top + 91, PhoneColors.textSecondary(style));
+            drawText(graphics, style, "No plans on this network", left + 18, top + 86, 168,
+                    PhoneColors.textPrimary(style));
+            drawText(graphics, style, "Go back to choose another.", left + 18, top + 103, 168,
+                    PhoneColors.textSecondary(style));
             return;
         }
         int first = clampScroll(plans.size(), PLAN_VISIBLE);
@@ -160,20 +177,15 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
             PlanSyncPacket.PlanEntry plan = plans.get(index);
             int y = top + 62 + (index - first) * PLAN_ROW;
             PhoneRenderer.drawCard(graphics, style, left + 8, y, 188, 74);
-            graphics.drawString(font, font.plainSubstrByWidth(plan.displayName(), 174),
-                    left + 14, y + 5, PhoneColors.textPrimary(style), true);
-            graphics.drawString(font, font.plainSubstrByWidth(
-                            PlanSubscriptionHandler.formatCurrency(plan.price()) + " - "
-                                    + plan.billingCycleDays() + "d cycle", 174),
-                    left + 14, y + 17, PhoneColors.success(style), true);
-            graphics.drawString(font, font.plainSubstrByWidth(allowance(plan.callMinutes(), " min") + " / "
-                            + allowance(plan.textMessages(), " texts") + " / "
-                            + allowance(plan.dataAllowanceMb(), " MB"), 174),
-                    left + 14, y + 29, PhoneColors.textSecondary(style), true);
-            String roaming = !plan.allowRoaming() ? "none" : plan.roamingMode();
-            graphics.drawString(font, font.plainSubstrByWidth("Max " + SignalTier.displayName(plan.maxSignalTier())
-                            + " - Roaming: " + roaming + " - Overage: " + (plan.allowOverage() ? "yes" : "no"), 174),
-                    left + 14, y + 41, PhoneColors.textSecondary(style), true);
+            drawText(graphics, style, plan.displayName(), left + 14, y + 5, 174, PhoneColors.textPrimary(style));
+            drawText(graphics, style, PlanSubscriptionHandler.formatCurrency(plan.price()) + " / "
+                    + plan.billingCycleDays() + " days", left + 14, y + 18, 174, PhoneColors.success(style));
+            drawText(graphics, style, allowance(plan.callMinutes(), " min") + " | "
+                    + allowance(plan.textMessages(), " texts"), left + 14, y + 31, 174,
+                    PhoneColors.textSecondary(style));
+            drawText(graphics, style, allowance(plan.dataAllowanceMb(), " MB") + " | "
+                    + SignalTier.displayName(plan.maxSignalTier()), left + 14, y + 44, 174,
+                    PhoneColors.textSecondary(style));
             boolean active = plan.id().equals(state.activePlanId());
             boolean waiting = awaitingPlanId != null;
             String label = active ? "Active" : plan.id().equals(awaitingPlanId) ? "Wait..." : "Select";
@@ -183,6 +195,28 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                 PhoneRenderer.drawPrimaryButton(graphics, style, left + 138, y + 54, 52, 17, label, font);
             }
         }
+        renderPager(graphics, style, left, top, first, plans.size(), PLAN_VISIBLE);
+        if (!selectionMessage.isEmpty()) {
+            drawText(graphics, style, selectionMessage, left + 14, top + 299, 174, PhoneColors.error(style));
+        }
+    }
+
+    private void drawText(GuiGraphics graphics, PhoneStyle style, String text, int x, int y, int width, int color) {
+        if (style == PhoneStyle.IOS) {
+            SnappleText.draw(graphics, font, SnappleAppLayout.fit(font, text, width), x, y, color);
+        } else {
+            String fitted = font.plainSubstrByWidth(text, width);
+            graphics.drawString(font, fitted, x, y, color, true);
+        }
+    }
+
+    private void renderPager(GuiGraphics graphics, PhoneStyle style, int left, int top,
+                             int first, int size, int visible) {
+        if (size <= visible) return;
+        if (first > 0) PhoneRenderer.drawSecondaryButton(graphics, style, left + 12, top + 313, 62, 20, "Back", font);
+        if (first + visible < size) PhoneRenderer.drawSecondaryButton(graphics, style, left + 130, top + 313, 62, 20, "Next", font);
+        drawText(graphics, style, (first + 1) + "-" + Math.min(size, first + visible) + "/" + size,
+                left + 80, top + 319, 46, PhoneColors.textSecondary(style));
     }
 
     private int clampScroll(int size, int visible) {
@@ -191,7 +225,7 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
     }
 
     private static String allowance(long amount, String unit) {
-        return amount < 0 ? "Unlimited" + unit : amount + unit;
+        return amount < 0 ? "Unlimited" : amount + unit;
     }
 
     private void renderUsage(GuiGraphics graphics, PhoneStyle style, PlanSyncPacket state, int left, int top) {
@@ -199,11 +233,10 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                 .filter(entry -> entry.id().equals(state.activePlanId())).findFirst().orElse(null);
 
         PhoneRenderer.drawCard(graphics, style, left + 8, top + 62, 188, 56);
-        graphics.drawString(font, "CURRENT PLAN", left + 14, top + 68,
-                PhoneColors.textSecondary(style), true);
+        drawText(graphics, style, "CURRENT PLAN", left + 14, top + 68, 174,
+                PhoneColors.textSecondary(style));
         String planName = plan == null || plan.displayName().isBlank() ? state.activePlanId() : plan.displayName();
-        graphics.drawString(font, font.plainSubstrByWidth(planName, 174),
-                left + 14, top + 81, PhoneColors.textPrimary(style), true);
+        drawText(graphics, style, planName, left + 14, top + 81, 174, PhoneColors.textPrimary(style));
         if (plan != null) {
                     String carrier;
                     if (plan.carrierNetworkId().isBlank()) {
@@ -219,14 +252,13 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                                 .findFirst().orElse(null);
                         carrier = carrierName != null ? carrierName : "Unknown carrier";
                     }
-                    graphics.drawString(font, font.plainSubstrByWidth(
-                                    PlanSubscriptionHandler.formatCurrency(plan.price()) + " / " + plan.billingCycleDays()
-                                            + " days - " + carrier, 174),
-                            left + 14, top + 99, PhoneColors.textSecondary(style), true);
+                    drawText(graphics, style, PlanSubscriptionHandler.formatCurrency(plan.price()) + " / "
+                                    + plan.billingCycleDays() + " days - " + carrier,
+                            left + 14, top + 99, 174, PhoneColors.textSecondary(style));
 
             PhoneRenderer.drawCard(graphics, style, left + 8, top + 124, 188, 120);
-            graphics.drawString(font, "Usage this cycle", left + 14, top + 130,
-                    PhoneColors.textPrimary(style), true);
+            drawText(graphics, style, "Usage this cycle", left + 14, top + 130, 174,
+                    PhoneColors.textPrimary(style));
             drawUsage(graphics, style, left + 14, top + 146, "Minutes", state.minutesUsed(), plan.callMinutes());
             drawUsage(graphics, style, left + 14, top + 176, "Texts", state.textsUsed(), plan.textMessages());
             drawUsage(graphics, style, left + 14, top + 206, "Data",
@@ -235,20 +267,18 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
             PhoneRenderer.drawCard(graphics, style, left + 8, top + 250, 188, 46);
             String renews = "Cycle day " + state.cycleStartDay() + " - renews day "
                     + (state.cycleStartDay() + plan.billingCycleDays());
-            graphics.drawString(font, font.plainSubstrByWidth(renews, 174),
-                    left + 14, top + 256, PhoneColors.textSecondary(style), true);
+            drawText(graphics, style, renews, left + 14, top + 256, 174, PhoneColors.textSecondary(style));
             String roaming = plan.allowRoaming() ? "Roaming " + plan.roamingMode().toLowerCase(java.util.Locale.ROOT)
                     : "Roaming unavailable";
-            graphics.drawString(font, font.plainSubstrByWidth("Signal cap " + SignalTier
-                            .displayName(plan.maxSignalTier()) + " - " + roaming, 174),
-                    left + 14, top + 274, PhoneColors.textSecondary(style), true);
+            drawText(graphics, style, "Signal cap " + SignalTier.displayName(plan.maxSignalTier())
+                            + " - " + roaming, left + 14, top + 274, 174, PhoneColors.textSecondary(style));
         }
         int[] change = planActionBounds(true);
         int[] cancel = planActionBounds(false);
         PhoneRenderer.drawPrimaryButton(graphics, style, change[0], change[1], change[2], change[3],
                 "Change plan", font);
         PhoneRenderer.drawSecondaryButton(graphics, style, cancel[0], cancel[1], cancel[2], cancel[3],
-                "Cancel plan", font);
+                "Cancel", font);
     }
 
     private int[] planActionBounds(boolean changeButton) {
@@ -269,15 +299,13 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
         PhoneRenderer.fillRoundedRect(graphics, style, left, top, PhoneFrame.getScreenW(),
                 PhoneFrame.getScreenH() - 24, 4, 0xB0000000);
         PhoneRenderer.drawCard(graphics, style, left + 14, top + 100, 176, 122);
-        graphics.drawString(font, "Are you sure?", left + 22, top + 108, PhoneColors.textPrimary(style), true);
-        int lineY = top + 124;
-        for (var line : font.split(Component.literal("You will lose access to network services until you "
-                + "select a new plan."), 160)) {
-            graphics.drawString(font, line, left + 22, lineY, PhoneColors.textSecondary(style), true);
-            lineY += 10;
-        }
+        drawText(graphics, style, "Cancel your plan?", left + 22, top + 108, 160, PhoneColors.textPrimary(style));
+        drawText(graphics, style, "Network services will stop", left + 22, top + 128, 160,
+                PhoneColors.textSecondary(style));
+        drawText(graphics, style, "until you choose a new plan.", left + 22, top + 141, 160,
+                PhoneColors.textSecondary(style));
         PhoneRenderer.drawSecondaryButton(graphics, style, left + 20, top + 194, 78, 20, "Keep plan", font);
-        PhoneRenderer.drawPrimaryButton(graphics, style, left + 106, top + 194, 78, 20, "Cancel plan", font);
+        PhoneRenderer.drawPrimaryButton(graphics, style, left + 106, top + 194, 78, 20, "Cancel", font);
     }
 
     private void drawUsage(GuiGraphics graphics, PhoneStyle style, int x, int y, String label,
@@ -289,10 +317,8 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                           long used, long maximum, String unit) {
         String maxText = maximum < 0 ? "Unlimited" : Long.toString(maximum) + unit;
         String value = Math.max(0L, used) + unit + " / " + maxText;
-        graphics.drawString(font, label, x, y, PhoneColors.textPrimary(style), true);
-        graphics.drawString(font, font.plainSubstrByWidth(value, 100),
-                x + 174 - font.width(font.plainSubstrByWidth(value, 100)), y,
-                PhoneColors.textSecondary(style), true);
+        drawText(graphics, style, label, x, y, 65, PhoneColors.textPrimary(style));
+        drawText(graphics, style, value, x + 70, y, 104, PhoneColors.textSecondary(style));
         int barY = y + 12;
         PhoneRenderer.fillRoundedRect(graphics, style, x, barY, 174, 7, 4, PhoneColors.bgTertiary(style));
         double ratio = maximum < 0 ? 0.0D
@@ -320,6 +346,20 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
         }
         if (button == 0) {
             PlanSyncPacket state = ClientPlanCache.snapshot();
+            if (chooserMode()) {
+                int size = chooserStep == ChooserStep.NETWORK ? state.networks().size()
+                        : plansOnSelectedNetwork(state).size();
+                int visible = chooserStep == ChooserStep.NETWORK ? NETWORK_VISIBLE : PLAN_VISIBLE;
+                int first = clampScroll(size, visible);
+                if (size > visible && inside(x, y, left + 12, top + 313, 62, 20) && first > 0) {
+                    scroll = Math.max(0, first - visible);
+                    return true;
+                }
+                if (size > visible && inside(x, y, left + 130, top + 313, 62, 20) && first + visible < size) {
+                    scroll = Math.min(size - visible, first + visible);
+                    return true;
+                }
+            }
             if (!chooserMode()) {
                 int[] change = planActionBounds(true);
                 int[] cancel = planActionBounds(false);
@@ -344,6 +384,7 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                         selectedNetworkId = networks.get(index).id();
                         chooserStep = ChooserStep.PLAN;
                         scroll = 0;
+                        selectionMessage = "";
                         return true;
                     }
                 }
@@ -356,6 +397,7 @@ public final class PlanScreen extends Screen implements PhoneNavigableScreen {
                         if (awaitingPlanId == null && !plan.id().equals(state.activePlanId())) {
                             awaitingPlanId = plan.id();
                             awaitingSince = System.currentTimeMillis();
+                            selectionMessage = "";
                             PacketDistributor.sendToServer(new SelectPlanPacket(plan.id()));
                         }
                         return true;

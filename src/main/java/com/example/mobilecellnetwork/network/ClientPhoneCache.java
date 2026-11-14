@@ -15,6 +15,9 @@ public final class ClientPhoneCache {
     private static volatile boolean doNotDisturb;
     private static volatile String ringtoneSound = "minecraft:block.note_block.bell";
     private static volatile String theme = "samsung";
+    private static volatile String profilePhoto = "";
+    private static volatile String appearance = "default";
+    private static volatile String deviceName = "";
     private static volatile PhoneStyle phoneStyle = PhoneStyle.SAMSUNG_ONE_UI;
     private static volatile int lowPowerRevision;
     private static volatile List<OnlinePlayer> onlinePlayers = List.of();
@@ -22,6 +25,8 @@ public final class ClientPhoneCache {
     private static volatile java.util.Set<String> installedApps =
             java.util.Set.of("phone", "sms", "contacts", "settings");
     private static volatile List<PhoneDataSyncPacket.FollowedPlayer> followedPlayers = List.of();
+    private static volatile List<String> homeAppOrder = List.of();
+    private static volatile java.util.Set<String> purchasedApps = java.util.Set.of();
     private static volatile Map<String, Boolean> appNotifications = Map.of();
     private static final Map<String, String> CONTACTS = new ConcurrentHashMap<>();
 
@@ -38,6 +43,9 @@ public final class ClientPhoneCache {
         doNotDisturb = packet.doNotDisturb();
         ringtoneSound = packet.ringtoneSound();
         theme = packet.theme();
+        profilePhoto = packet.profilePhoto();
+        appearance = packet.appearance();
+        deviceName = packet.deviceName();
         lowPowerRevision++;
         CONTACTS.clear();
         packet.contacts().forEach(contact -> CONTACTS.put(contact.name(), contact.number()));
@@ -46,6 +54,8 @@ public final class ClientPhoneCache {
                 .map(player -> new OnlinePlayer(player.id(), player.name(), player.number()))
                 .toList();
         installedApps = java.util.Set.copyOf(packet.installedApps());
+        homeAppOrder = List.copyOf(packet.homeAppOrder());
+        purchasedApps = java.util.Set.copyOf(packet.purchasedApps());
         followedPlayers = List.copyOf(packet.followedPlayers());
         java.util.Map<String, Boolean> notificationsByApp = new java.util.HashMap<>();
         packet.appNotifications().forEach(entry -> notificationsByApp.put(entry.appId(), entry.enabled()));
@@ -54,7 +64,12 @@ public final class ClientPhoneCache {
 
     public static void clearSensitiveData() {
         phoneNumber = "";
+        profilePhoto = "";
+        appearance = "default";
+        deviceName = "";
         planId = "";
+        homeAppOrder = List.of();
+        purchasedApps = java.util.Set.of();
         onlinePlayers = List.of();
         notifications = List.of();
         CONTACTS.clear();
@@ -116,6 +131,10 @@ public final class ClientPhoneCache {
     public static boolean doNotDisturb() { return doNotDisturb; }
     public static String ringtoneSound() { return ringtoneSound; }
     public static String theme() { return theme; }
+    public static String profilePhoto() { return profilePhoto; }
+    public static String appearance() { return appearance; }
+    public static String deviceName() { return deviceName; }
+    public static void setAppearance(String value) { appearance = value; }
     public static PhoneStyle phoneStyle() { return phoneStyle; }
     public static void setPhoneStyle(PhoneStyle value) {
         phoneStyle = value == null ? PhoneStyle.DEFAULT : value;
@@ -129,6 +148,9 @@ public final class ClientPhoneCache {
     public static boolean flashlightOn() { return flashlightOn; }
     public static void setFlashlightOn(boolean on) { flashlightOn = on; }
     public static java.util.Set<String> installedApps() { return installedApps; }
+    public static List<String> homeAppOrder() { return homeAppOrder; }
+    public static boolean ownsApp(String id) { return purchasedApps.contains(id); }
+    public static void setHomeAppOrder(List<String> order) { homeAppOrder = List.copyOf(order); }
     public static List<PhoneDataSyncPacket.FollowedPlayer> followedPlayers() { return followedPlayers; }
     public static Map<String, Boolean> appNotifications() { return appNotifications; }
     public static boolean canUseApp(String appId) {

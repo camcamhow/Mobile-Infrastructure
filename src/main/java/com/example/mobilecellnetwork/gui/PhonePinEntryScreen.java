@@ -54,16 +54,21 @@ public final class PhonePinEntryScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.fill(width / 2 - 108, height / 2 - 70, width / 2 + 108, height / 2 + 75,
-                PhoneColors.bgPrimary(ClientPhoneCache.phoneStyle()));
-        graphics.renderOutline(width / 2 - 108, height / 2 - 70, 216, 145,
-                PhoneColors.divider(ClientPhoneCache.phoneStyle()));
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 52,
-                PhoneColors.textPrimary(ClientPhoneCache.phoneStyle()));
-        graphics.drawCenteredString(font, remove ? "Verify your current PIN to remove it."
-                        : "Choose a 4-12 digit PIN for this phone.",
-                width / 2, height / 2 - 34, PhoneColors.textSecondary(ClientPhoneCache.phoneStyle()));
-        super.render(graphics, mouseX, mouseY, partialTick);
+        PhoneFrame.beginPhoneText();
+        try {
+            graphics.fill(width / 2 - 108, height / 2 - 70, width / 2 + 108, height / 2 + 75,
+                    PhoneColors.bgPrimary(ClientPhoneCache.phoneStyle()));
+            graphics.renderOutline(width / 2 - 108, height / 2 - 70, 216, 145,
+                    PhoneColors.divider(ClientPhoneCache.phoneStyle()));
+            graphics.drawCenteredString(font, title, width / 2, height / 2 - 52,
+                    PhoneColors.textPrimary(ClientPhoneCache.phoneStyle()));
+            graphics.drawCenteredString(font, remove ? "Verify your current PIN to remove it."
+                            : "Choose a 4-12 digit PIN for this phone.",
+                    width / 2, height / 2 - 34, PhoneColors.textSecondary(ClientPhoneCache.phoneStyle()));
+            super.render(graphics, mouseX, mouseY, partialTick);
+        } finally {
+            PhoneFrame.endPhoneText();
+        }
     }
 
     private void returnToParent() {

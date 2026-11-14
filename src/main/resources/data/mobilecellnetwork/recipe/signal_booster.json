@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [" R ", "ICI", " I "],
+  "key": { "R": { "item": "minecraft:redstone" }, "I": { "item": "minecraft:iron_ingot" }, "C": { "item": "minecraft:comparator" } },
+  "result": { "id": "mobilecellnetwork:signal_booster", "count": 1 }
+}

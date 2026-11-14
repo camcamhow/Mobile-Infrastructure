@@ -1,6 +1,7 @@
 package com.example.mobilecellnetwork.network;
 
 import com.example.mobilecellnetwork.capabilities.ModCapabilities;
+import com.example.mobilecellnetwork.plans.PlanRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -22,15 +23,31 @@ public final class ConnectionDelayService {
     }
 
     public static void submit(Player sender, Runnable request) {
-        submit(sender, request, () -> {
+        submit(sender, request, defaultNoService(sender), true);
+    }
+
+    public static void submitForPlanSelection(Player sender, Runnable request) {
+        submit(sender, request, defaultNoService(sender), false);
+    }
+
+    private static Runnable defaultNoService(Player sender) {
+        return () -> {
             if (sender instanceof ServerPlayer player) {
                 player.displayClientMessage(Component.literal("No Service."), true);
             }
-        });
+        };
     }
 
     public static void submit(Player sender, Runnable request, Runnable noService) {
+        submit(sender, request, noService, true);
+    }
+
+    private static void submit(Player sender, Runnable request, Runnable noService, boolean requiresPlan) {
         if (!(sender instanceof ServerPlayer player) || player.isRemoved()) {
+            return;
+        }
+        if (requiresPlan && !hasActivePlan(player)) {
+            noService.run();
             return;
         }
         if (player.getData(ModCapabilities.PHONE_DATA).isDead()) {
@@ -51,7 +68,7 @@ public final class ConnectionDelayService {
 
         int delayTicks = estimateDelayTicks(signal);
         long dueTick = player.serverLevel().getGameTime() + delayTicks;
-        PENDING.add(new PendingRequest(player.server, player, dueTick, request, noService));
+        PENDING.add(new PendingRequest(player.server, player, dueTick, request, noService, requiresPlan));
         int activeCount = ACTIVE_COUNTS.merge(player.getUUID(), 1, Integer::sum);
         if (activeCount == 1) {
             PacketDistributor.sendToPlayer(player, new ConnectionStatePacket(true, delayTicks));
@@ -85,7 +102,8 @@ public final class ConnectionDelayService {
             PENDING.remove(request);
             ServerPlayer player = request.player();
             try {
-                if (!player.isRemoved() && CoverageEngine.getStrongestAntennaFor(player) != null) {
+                if (!player.isRemoved() && (!request.requiresPlan() || hasActivePlan(player))
+                        && CoverageEngine.getStrongestAntennaFor(player) != null) {
                     request.action().run();
                 } else if (!player.isRemoved()) {
                     request.noService().run();
@@ -104,7 +122,13 @@ public final class ConnectionDelayService {
         }
     }
 
+    private static boolean hasActivePlan(ServerPlayer player) {
+        var usage = player.getData(ModCapabilities.PLAN_USAGE);
+        return usage.isCycleActive() && !usage.getActivePlanId().isBlank()
+                && PlanRegistry.findPlan(usage.getActivePlanId()) != null;
+    }
+
     private record PendingRequest(MinecraftServer server, ServerPlayer player, long dueTick,
-                                  Runnable action, Runnable noService) {
+                                  Runnable action, Runnable noService, boolean requiresPlan) {
     }
 }

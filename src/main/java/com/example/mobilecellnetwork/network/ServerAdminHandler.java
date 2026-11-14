@@ -31,17 +31,20 @@ public final class ServerAdminHandler {
                 .contains(packet.tab())) {
             return;
         }
-        if (!player.hasPermissions(2) && !"Networks".equals(packet.tab())) {
+        if (!player.hasPermissions(2) && !"Networks".equals(packet.tab()) && !"Plans".equals(packet.tab())) {
             if (!"Roaming".equals(packet.tab())) {
+                if ("Plans".equals(packet.tab())) {
+                    player.sendSystemMessage(Component.literal("Administrator permission is required to manage plans."));
+                }
                 return;
             }
         }
         List<String> rows = switch (packet.tab()) {
-            case "Networks" -> networkRows(player, !player.hasPermissions(2));
-            case "Roaming" -> roamingRows(player, !player.hasPermissions(2));
+            case "Networks" -> networkRows(player, true);
+            case "Roaming" -> roamingRows(player, true);
             case "Antennas" -> antennaRows(player);
             case "Players" -> playerRows(player);
-            case "Plans" -> planRows();
+            case "Plans" -> planRows(player);
             case "Billing" -> billingRows(player);
             default -> List.of();
         };
@@ -49,15 +52,26 @@ public final class ServerAdminHandler {
     }
 
     public static void action(net.minecraft.world.entity.player.Player sender, ServerAdminActionPacket packet) {
-        if (!(sender instanceof ServerPlayer player) || !validMenu(player)
-                || packet.tab().length() > 16 || packet.action().length() > 16
+        if (!(sender instanceof ServerPlayer player)) {
+            return;
+        }
+        if (!validMenu(player) || packet.tab().length() > 16 || packet.action().length() > 16
                 || packet.target().length() > 128 || packet.value().length() > 1200) {
+            if ("Plans".equals(packet.tab()) && ("create".equals(packet.action()) || "upsert".equals(packet.action()))) {
+                sendPlanEditorResult(player, false);
+            }
             return;
         }
         if (!player.hasPermissions(2)) {
-            if ("Networks".equals(packet.tab())
+            if ("Plans".equals(packet.tab())) {
+                boolean success = planAction(player, packet);
+                if ("create".equals(packet.action()) || "upsert".equals(packet.action())) {
+                    sendPlanEditorResult(player, success);
+                }
+                request(player, new ServerAdminRequestPacket("Plans"));
+            } else if ("Networks".equals(packet.tab())
                     && ("alert".equals(packet.action()) || "setPassword".equals(packet.action())
-                    || "setup".equals(packet.action()))) {
+                    || "setup".equals(packet.action()) || "restore".equals(packet.action()))) {
                 networkAction(player, packet);
                 request(player, new ServerAdminRequestPacket("Networks"));
             } else if ("Roaming".equals(packet.tab())) {
@@ -83,15 +97,30 @@ public final class ServerAdminHandler {
             case "Roaming" -> roamingAction(player, packet);
             case "Antennas" -> antennaAction(player, packet);
             case "Players" -> playerAction(player, packet);
-            case "Plans" -> planAction(player, packet);
+            case "Plans" -> {
+                boolean success = planAction(player, packet);
+                if ("create".equals(packet.action()) || "upsert".equals(packet.action())) {
+                    sendPlanEditorResult(player, success);
+                }
+            }
             case "Billing" -> billingAction(player, packet);
             default -> { }
         }
+
         request(player, new ServerAdminRequestPacket(packet.tab()));
     }
 
+    private static void sendPlanEditorResult(ServerPlayer player, boolean success) {
+        PacketDistributor.sendToPlayer(player, new PhoneNotificationPacket("SYSTEM", "Plan editor",
+                success ? "Plan saved." : "Plan not saved. Check chat for details.", false));
+    }
+
     public static boolean createNetwork(net.minecraft.world.entity.player.Player sender, String name, String password) {
-        if (!(sender instanceof ServerPlayer player) || !validMenu(player)) {
+        if (!(sender instanceof ServerPlayer player)) {
+            return false;
+        }
+        if (!validMenu(player)) {
+            sendNetworkCreationResult(player, false, "The server menu is no longer available.");
             return false;
         }
 
@@ -120,9 +149,21 @@ public final class ServerAdminHandler {
                 MobileCellNetworkConfig.DEFAULT_NETWORK_ROAMING_POLICY.get()));
         var settings = data.getNetworkSettings(id);
         settings.setPasswordHash(PasswordUtil.hash(password, settings.getPasswordSalt()));
+        ServerMenu menu = (ServerMenu) player.containerMenu;
+        if (!(player.serverLevel().getBlockEntity(menu.position())
+                instanceof com.example.mobilecellnetwork.blockentity.ServerBlockEntity serverBlock)) {
+            data.deleteNetwork(id);
+            sendNetworkCreationResult(player, false, "The server block is no longer available.");
+            return false;
+        }
+        settings.setServerBlock(player.serverLevel().dimension().location().toString(), menu.position().asLong());
+        settings.setServerOnline(true);
+        serverBlock.addManagedNetwork(id);
+        data.setDirty();
 
         sendNetworkCreationResult(player, true, "Network '" + normalizedName + "' created.");
         request(player, new ServerAdminRequestPacket("Networks"));
+        player.server.getPlayerList().getPlayers().forEach(NetworkHandler::syncPlanData);
         return true;
     }
 
@@ -137,19 +178,26 @@ public final class ServerAdminHandler {
 
     private static List<String> networkRows(ServerPlayer player, boolean ownerOnly) {
         NetworkSavedData saved = NetworkSavedData.get(player.serverLevel().getServer().overworld());
+        ServerMenu menu = (ServerMenu) player.containerMenu;
+        boolean canRestore = player.serverLevel().getBlockEntity(menu.position())
+                instanceof com.example.mobilecellnetwork.blockentity.ServerBlockEntity serverBlock
+                && serverBlock.getManagedNetworks().isEmpty();
         return saved.getNetworks().entrySet().stream()
                 .filter(entry -> !ownerOnly || player.getUUID().equals(entry.getValue().ownerUUID()))
+                .filter(entry -> !saved.getNetworkSettings(entry.getKey()).isServerRemoved() || canRestore)
                 .map(entry -> {
                     var settings = saved.getNetworkSettings(entry.getKey());
-                    String serverState = !settings.hasServerBlock() ? "No server"
-                            : settings.isServerOnline() ? "Online" : "Offline";
+                    String serverState = !settings.hasServerBlock() && canRestore ? "Restore"
+                            : !settings.hasServerBlock() ? "No server"
+                            : CoverageEngine.isServerOnline(player.server, settings) ? "Online" : "Offline";
                     return String.join("|", "network", entry.getKey(), clean(entry.getValue().name()),
                         Integer.toString(entry.getValue().towers().size()),
                         entry.getValue().allowed() ? "allowed" : "not allowed",
                         clean(entry.getValue().ownerName()), entry.getValue().defaultRoamingPolicy().name(),
                         serverState, Boolean.toString(!settings.getPasswordHash().isBlank()),
                         settings.getServerBlockDimension(), Long.toString(settings.getServerBlockPos()),
-                        Long.toString(saved.getRevenueBalance(entry.getKey())));
+                        Long.toString(saved.getRevenueBalance(entry.getKey())),
+                        Boolean.toString(settings.isAllowRoaming()));
                 })
                 .limit(200).toList();
     }
@@ -163,6 +211,9 @@ public final class ServerAdminHandler {
                 return;
             }
             var settings = saved.getNetworkSettings(entry.getKey());
+            if (settings.isServerRemoved()) {
+                return;
+            }
             String agreements = settings.getAgreements().keySet().stream()
                     .sorted().map(id -> id + "=" + java.util.Optional.ofNullable(saved.getNetwork(id))
                             .map(NetworkSavedData.NetworkRecord::name).map(ServerAdminHandler::clean).orElse(id))
@@ -271,14 +322,12 @@ public final class ServerAdminHandler {
                 .limit(200).toList();
     }
 
-    private static List<String> planRows() {
+    private static List<String> planRows(ServerPlayer player) {
         NetworkSavedData saved = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer() == null
                 ? null : NetworkSavedData.get(net.neoforged.neoforge.server.ServerLifecycleHooks
                 .getCurrentServer().overworld());
-        String networkOptions = saved == null ? "" : saved.getNetworks().entrySet().stream()
-                .map(entry -> entry.getKey() + "=" + clean(entry.getValue().name()))
-                .collect(java.util.stream.Collectors.joining(";"));
-        return PlanRegistry.getAllPlans().stream()
+        List<String> rows = new ArrayList<>(PlanRegistry.getAllPlans().stream()
+                .filter(plan -> ownsNetwork(player, saved, plan.carrierNetworkId()))
                 .map(plan -> String.join("|", "plan", plan.id(), clean(plan.displayName()),
                         Long.toString(plan.price()), plan.maxSignalTier().name(),
                         Integer.toString(plan.billingCycleDays()), Integer.toString(plan.callMinutes()),
@@ -286,8 +335,21 @@ public final class ServerAdminHandler {
                         Boolean.toString(plan.allowRoaming()), Long.toString(plan.roamingFeePerMinute()),
                         Long.toString(plan.roamingFeePerMb()), clean(plan.description()), plan.dataSpeed().name(),
                         Boolean.toString(plan.autoRenew()), Boolean.toString(plan.isDefault()),
-                        String.join(",", plan.allowedNetworks()), networkOptions, plan.carrierNetworkId()))
-                .limit(200).toList();
+                        String.join(",", plan.allowedNetworks()), "", plan.carrierNetworkId()))
+                .toList());
+        if (saved != null) {
+            saved.getNetworks().forEach((id, network) -> {
+                if (ownsNetwork(player, saved, id)) {
+                    rows.add(String.join("|", "plan_network", id, clean(network.name())));
+                }
+            });
+        }
+        if (rows.size() > 200) {
+            List<String> limited = new ArrayList<>(rows.subList(0, 199));
+            limited.add("plan_warning|Only the first 199 plans and networks are shown.");
+            return limited;
+        }
+        return rows;
     }
 
     private static List<String> billingRows(ServerPlayer player) {
@@ -309,8 +371,29 @@ public final class ServerAdminHandler {
         return value.replace('|', '/');
     }
 
+    private static boolean ownsNetwork(ServerPlayer player, NetworkSavedData saved, String networkId) {
+        return saved != null && networkId != null && saved.getNetwork(networkId) != null
+                && player.getUUID().equals(saved.getNetwork(networkId).ownerUUID());
+    }
+
     private static boolean networkAction(ServerPlayer player, ServerAdminActionPacket packet) {
         NetworkSavedData data = NetworkSavedData.get(player.serverLevel().getServer().overworld());
+        if (!"create".equals(packet.action())) {
+            String id = data.findNetworkId(packet.target());
+            if (!ownsNetwork(player, data, id)) {
+                message(player, "You can only manage networks you own.");
+                return false;
+            }
+            if ("restore".equals(packet.action())) {
+                ServerMenu menu = (ServerMenu) player.containerMenu;
+                if (!ServerBlockPlaceHandler.restore(player, menu.position(), id)) {
+                    message(player, "Unable to restore that network to this server.");
+                    return false;
+                }
+                message(player, "Network restored to this server.");
+                return true;
+            }
+        }
         if ("alert".equals(packet.action())) {
             networkAlert(player, packet);
             return true;
@@ -428,8 +511,7 @@ public final class ServerAdminHandler {
             return false;
         }
         NetworkSavedData.NetworkRecord network = saved.getNetwork(networkId);
-        if (!player.hasPermissions(2)
-                && (network == null || !player.getUUID().equals(network.ownerUUID()))) {
+        if (network == null || !player.getUUID().equals(network.ownerUUID())) {
             message(player, "You can only manage roaming settings for networks you own.");
             return false;
         }
@@ -728,9 +810,15 @@ public final class ServerAdminHandler {
     }
 
     private static boolean planAction(ServerPlayer player, ServerAdminActionPacket packet) {
+        NetworkSavedData savedData = NetworkSavedData.get(player.server.overworld());
+        PlanRegistry.Plan existing = PlanRegistry.findPlan(packet.target());
+        if (existing != null && !ownsNetwork(player, savedData, existing.carrierNetworkId())) {
+            message(player, "You can only manage plans belonging to networks you own.");
+            return false;
+        }
         if ("delete".equals(packet.action())) {
             if (!"DELETE".equalsIgnoreCase(packet.value().trim())) {
-                message(player, "Type DELETE in the confirmation dialog to remove this plan.");
+                player.sendSystemMessage(Component.literal("Type DELETE in the confirmation dialog to remove this plan."));
                 return false;
             }
             PlanRegistry.Plan fallback = PlanRegistry.getDefaultPlan();
@@ -738,12 +826,12 @@ public final class ServerAdminHandler {
                     .filter(target -> target.getData(ModCapabilities.PLAN_USAGE).getActivePlanId()
                             .equals(packet.target()))
                     .toList();
-            assigned.forEach(target -> com.example.mobilecellnetwork.voice.CallManager.hangUp(target.getUUID()));
             boolean removed = PlanRegistry.deleteAdminPlan(packet.target());
             if (!removed) {
-                message(player, "Cannot delete unknown or default plan.");
+                player.sendSystemMessage(Component.literal("Cannot delete unknown or default plan."));
                 return false;
             }
+            assigned.forEach(target -> com.example.mobilecellnetwork.voice.CallManager.hangUp(target.getUUID()));
             NetworkSavedData saved = NetworkSavedData.get(player.serverLevel().getServer().overworld());
             saved.deletePlan(packet.target());
             saved.getPlanAssignments().forEach((playerId, assignedPlan) -> {
@@ -755,14 +843,15 @@ public final class ServerAdminHandler {
                 assignPlan(player, target, fallback.id());
             }
             player.server.getPlayerList().getPlayers().forEach(NetworkHandler::syncPlanData);
+            player.sendSystemMessage(Component.literal("Plan deleted: " + packet.target()));
             return true;
         }
-        if (!"upsert".equals(packet.action())) {
+        if (!"upsert".equals(packet.action()) && !"create".equals(packet.action())) {
             return false;
         }
         String[] fields = packet.value().split("\\|", -1);
         if (fields.length != 16 || fields[0].isBlank()) {
-            message(player, "Plan editor fields are incomplete.");
+            player.sendSystemMessage(Component.literal("Plan editor fields are incomplete."));
             return false;
         }
         try {
@@ -770,9 +859,12 @@ public final class ServerAdminHandler {
                 throw new IllegalArgumentException("Invalid plan ID.");
             }
             PlanRegistry.Plan previous = PlanRegistry.findPlan(packet.target());
-            if (previous == null && PlanRegistry.getAllPlans().stream()
-                    .anyMatch(plan -> plan.id().equals(packet.target()))) {
-                message(player, "Plan ID already exists.");
+            if ("create".equals(packet.action()) && previous != null) {
+                player.sendSystemMessage(Component.literal("Plan ID already exists."));
+                return false;
+            }
+            if ("upsert".equals(packet.action()) && previous == null) {
+                player.sendSystemMessage(Component.literal("The plan no longer exists. Refresh and try again."));
                 return false;
             }
             long price = Long.parseLong(fields[2]);
@@ -794,12 +886,20 @@ public final class ServerAdminHandler {
             var saved = NetworkSavedData.get(player.serverLevel().getServer().overworld());
             String carrierNetworkId = fields[15].trim();
             if (carrierNetworkId.isBlank()) {
-                message(player, "Select a carrier network for this plan.");
+                player.sendSystemMessage(Component.literal("Select a carrier network for this plan."));
+                return false;
+            }
+            if (!ownsNetwork(player, saved, carrierNetworkId)) {
+                message(player, "Select a carrier network you own.");
+                return false;
+            }
+            if (isDefault != (previous != null && previous.isDefault())) {
+                message(player, "The server-wide default plan cannot be changed here.");
                 return false;
             }
             if (allowedNetworks.stream().anyMatch(id -> saved.getNetwork(id) == null)
                     || (!carrierNetworkId.isEmpty() && saved.getNetwork(carrierNetworkId) == null)) {
-                message(player, "Allowed networks contain an unknown network ID.");
+                player.sendSystemMessage(Component.literal("The carrier or an allowed network no longer exists."));
                 return false;
             }
             if (fields[0].isBlank() || price < 0 || cycleDays < 1 || callMinutes < -1 || texts < -1
@@ -816,6 +916,7 @@ public final class ServerAdminHandler {
                     previous == null ? 0L : previous.overageRatePerText(),
                     previous == null ? 0L : previous.overageRatePerMb());
             if (!PlanRegistry.putAdminPlan(plan)) {
+                player.sendSystemMessage(Component.literal("The plan could not be saved."));
                 return false;
             }
             if (previous != null && PlanRegistry.isDowngrade(previous, plan)) {
@@ -848,9 +949,10 @@ public final class ServerAdminHandler {
             NetworkSavedData.get(player.serverLevel().getServer().overworld())
                     .putPlan(plan.id(), new NetworkSavedData.PlanRecord(plan.displayName(), attributes));
             player.server.getPlayerList().getPlayers().forEach(NetworkHandler::syncPlanData);
+            player.sendSystemMessage(Component.literal("Plan saved: " + plan.displayName()));
             return true;
         } catch (IllegalArgumentException exception) {
-            message(player, "Invalid plan values: " + exception.getMessage());
+            player.sendSystemMessage(Component.literal("Invalid plan values: " + exception.getMessage()));
             return false;
         }
     }

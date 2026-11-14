@@ -25,6 +25,10 @@ public final class ConfirmActionModal extends Screen {
         this.onConfirm = onConfirm;
     }
 
+    public boolean isPhoneModal() {
+        return parent instanceof PhoneNavigableScreen;
+    }
+
     @Override
     protected void init() {
         modalW = Math.min(300, width - 20);
@@ -67,9 +71,12 @@ public final class ConfirmActionModal extends Screen {
         graphics.fill(modalX + 2, modalY + 2, modalX + modalW - 2, modalY + modalH - 2, 0xFF0F1620);
         graphics.renderOutline(modalX, modalY, modalW, modalH, 0xFF3A4A5A);
         graphics.fill(modalX, modalY, modalX + modalW, modalY + 2, PhoneColors.ACCENT_TEXT);
-        graphics.drawString(font, title, modalX + 12, modalY + 14, PhoneColors.PRIMARY_TEXT, true);
-        graphics.drawString(font, "This cannot be undone. Type DELETE below to confirm.",
-                modalX + 12, modalY + 48, PhoneColors.SECONDARY_TEXT, true);
+        graphics.drawString(font, font.plainSubstrByWidth(title.getString(), modalW - 24),
+                modalX + 12, modalY + 14, PhoneColors.PRIMARY_TEXT, true);
+        graphics.drawString(font, "This cannot be undone.", modalX + 12, modalY + 42,
+                PhoneColors.SECONDARY_TEXT, true);
+        graphics.drawString(font, "Type DELETE to confirm.", modalX + 12, modalY + 55,
+                PhoneColors.SECONDARY_TEXT, true);
         for (var child : children()) {
             if (child instanceof Renderable renderable) {
                 renderable.render(graphics, mouseX, mouseY, partialTick);

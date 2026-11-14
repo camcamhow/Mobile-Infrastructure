@@ -1,0 +1,7 @@
+{
+  "loader": "neoforge:separate_transforms",
+  "base": { "parent": "mobilecellnetwork:item/android_phone_body" },
+  "perspectives": {
+    "gui": { "parent": "minecraft:item/generated", "textures": { "layer0": "mobilecellnetwork:item/phone_android_icon" } }
+  }
+}

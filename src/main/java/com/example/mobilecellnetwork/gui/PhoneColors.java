@@ -56,7 +56,21 @@ public final class PhoneColors {
     private PhoneColors() {
     }
 
+    public static boolean dark(PhoneStyle style) {
+        return switch (ClientPhoneCache.appearance()) {
+            case "dark" -> true;
+            case "light" -> false;
+            default -> style != PhoneStyle.IOS;
+        };
+    }
+
     public static int bgPrimary(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFF101218 : 0xFFF6F7FB;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_BG_PRIMARY : IOS_SURFACE_PRIMARY;
+        }
         return switch (style) {
             case IOS -> IOS_SURFACE_PRIMARY;
             case DEFAULT -> DEFAULT_BG_PRIMARY;
@@ -65,6 +79,12 @@ public final class PhoneColors {
     }
 
     public static int bgSecondary(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFF20232B : 0xFFFFFFFF;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_BG_SECONDARY : IOS_SURFACE_SECONDARY;
+        }
         return switch (style) {
             case IOS -> IOS_SURFACE_SECONDARY;
             case DEFAULT -> DEFAULT_BG_SECONDARY;
@@ -73,6 +93,12 @@ public final class PhoneColors {
     }
 
     public static int bgTertiary(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFF30343E : 0xFFE9EDF4;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_BG_TERTIARY : IOS_SURFACE_TERTIARY;
+        }
         return switch (style) {
             case IOS -> IOS_SURFACE_TERTIARY;
             case DEFAULT -> DEFAULT_BG_TERTIARY;
@@ -81,6 +107,12 @@ public final class PhoneColors {
     }
 
     public static int textPrimary(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFFF1F2F6 : 0xFF171B22;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_TEXT_PRIMARY : IOS_LABEL_PRIMARY;
+        }
         return switch (style) {
             case IOS -> IOS_LABEL_PRIMARY;
             case DEFAULT -> DEFAULT_TEXT_PRIMARY;
@@ -89,6 +121,12 @@ public final class PhoneColors {
     }
 
     public static int textSecondary(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFFB6BDC9 : 0xFF5C6572;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_TEXT_SECONDARY : IOS_LABEL_SECONDARY;
+        }
         return switch (style) {
             case IOS -> IOS_LABEL_SECONDARY;
             case DEFAULT -> DEFAULT_TEXT_SECONDARY;
@@ -97,6 +135,12 @@ public final class PhoneColors {
     }
 
     public static int accent(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFF4584D8 : 0xFF2868BF;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_ACCENT : IOS_TINT;
+        }
         return switch (style) {
             case IOS -> IOS_TINT;
             case DEFAULT -> DEFAULT_ACCENT;
@@ -129,6 +173,12 @@ public final class PhoneColors {
     }
 
     public static int divider(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFF3B404B : 0xFFDBE0E9;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return dark(style) ? IOS_DIVIDER : IOS_SEPARATOR;
+        }
         return switch (style) {
             case IOS -> IOS_SEPARATOR;
             case DEFAULT -> DEFAULT_DIVIDER;
@@ -138,6 +188,12 @@ public final class PhoneColors {
 
     /** Returns the appropriate text color for buttons filled with the accent color. */
     public static int buttonTextOnAccent(PhoneStyle style) {
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            return dark(style) ? 0xFF091522 : 0xFFFFFFFF;
+        }
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return 0xFFFFFFFF;
+        }
         return switch (style) {
             case SAMSUNG_ONE_UI, IOS -> SAMSUNG_TEXT_PRIMARY;
             case DEFAULT -> textPrimary(style);
@@ -146,6 +202,9 @@ public final class PhoneColors {
 
     /** Returns the appropriate text color for buttons filled with the error color. */
     public static int buttonTextOnDestructive(PhoneStyle style) {
+        if (!"default".equals(ClientPhoneCache.appearance())) {
+            return 0xFFFFFFFF;
+        }
         return switch (style) {
             case SAMSUNG_ONE_UI, IOS -> SAMSUNG_TEXT_PRIMARY;
             case DEFAULT -> textPrimary(style);

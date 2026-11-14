@@ -1,3 +1,7 @@
 {
-  "parent": "mobilecellnetwork:block/phone_charger"
+  "loader": "neoforge:separate_transforms",
+  "base": { "parent": "mobilecellnetwork:block/phone_charger" },
+  "perspectives": {
+    "gui": { "parent": "minecraft:item/generated", "textures": { "layer0": "mobilecellnetwork:item/phone_charger_icon" } }
+  }
 }

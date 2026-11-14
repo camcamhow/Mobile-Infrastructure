@@ -16,6 +16,9 @@ public final class NetworkSettings {
     private long serverBlockPos = NO_SERVER_BLOCK;
     private String serverBlockDimension = "";
     private boolean serverOnline;
+    private boolean serverRemoved;
+    private long removedServerPos = NO_SERVER_BLOCK;
+    private String removedServerDimension = "";
     private boolean allowRoaming = true;
     private long defaultRatePerMinute;
     private long defaultRatePerText;
@@ -47,11 +50,23 @@ public final class NetworkSettings {
     public long getServerBlockPos() { return serverBlockPos; }
     public String getServerBlockDimension() { return serverBlockDimension; }
     public boolean hasServerBlock() { return serverBlockPos != NO_SERVER_BLOCK; }
+    public boolean isServerRemoved() { return serverRemoved; }
+    public boolean wasServerAt(String dimension, long pos) {
+        return serverRemoved && removedServerPos == pos && removedServerDimension.equals(dimension);
+    }
     public void setServerBlock(String dimension, long pos) {
         serverBlockDimension = dimension == null ? "" : dimension;
         serverBlockPos = pos;
+        serverRemoved = false;
+        removedServerPos = NO_SERVER_BLOCK;
+        removedServerDimension = "";
     }
     public void clearServerBlock() {
+        if (hasServerBlock()) {
+            removedServerPos = serverBlockPos;
+            removedServerDimension = serverBlockDimension;
+            serverRemoved = true;
+        }
         serverBlockPos = NO_SERVER_BLOCK;
         serverBlockDimension = "";
         serverOnline = false;
@@ -81,6 +96,9 @@ public final class NetworkSettings {
         tag.putLong("serverBlockPos", serverBlockPos);
         tag.putString("serverBlockDimension", serverBlockDimension);
         tag.putBoolean("serverOnline", serverOnline);
+        tag.putBoolean("serverRemoved", serverRemoved);
+        tag.putLong("removedServerPos", removedServerPos);
+        tag.putString("removedServerDimension", removedServerDimension);
         tag.putBoolean("allowRoaming", allowRoaming);
         tag.putLong("defaultRatePerMinute", defaultRatePerMinute);
         tag.putLong("defaultRatePerText", defaultRatePerText);
@@ -102,6 +120,11 @@ public final class NetworkSettings {
                 ? tag.getLong("serverBlockPos") : NO_SERVER_BLOCK;
         settings.serverBlockDimension = tag.getString("serverBlockDimension");
         settings.serverOnline = tag.getBoolean("serverOnline");
+        settings.serverRemoved = tag.contains("serverRemoved")
+                ? tag.getBoolean("serverRemoved") : !settings.hasServerBlock() && !settings.serverOnline;
+        settings.removedServerPos = tag.contains("removedServerPos", Tag.TAG_LONG)
+                ? tag.getLong("removedServerPos") : NO_SERVER_BLOCK;
+        settings.removedServerDimension = tag.getString("removedServerDimension");
         settings.allowRoaming = !tag.contains("allowRoaming") || tag.getBoolean("allowRoaming");
         settings.defaultRatePerMinute = tag.contains("defaultRatePerMinute")
                 ? Math.max(0L, tag.getLong("defaultRatePerMinute")) : settings.defaultRatePerMinute;

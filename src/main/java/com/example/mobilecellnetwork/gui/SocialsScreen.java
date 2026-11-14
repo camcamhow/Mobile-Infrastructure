@@ -97,8 +97,10 @@ public final class SocialsScreen extends Screen implements PhoneNavigableScreen 
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // No service gating: show overlay if no active plan and screen is not exempt
         if (ClientPhoneCache.planId().isBlank()) {
+            PhoneFrame.render(graphics, this);
             NoServiceOverlay.render(graphics, ClientPhoneCache.phoneStyle(), PhoneFrame.getScreenX(this),
-                    PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH(), "Socials", font);
+                    PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24, "Socials", font);
+            PhoneFrame.renderStatusBar(graphics, this);
             return;
         }
         PhoneFrame.render(graphics, this);
@@ -410,7 +412,7 @@ public final class SocialsScreen extends Screen implements PhoneNavigableScreen 
             int galleryWidth = 42;
             int galleryX = sendX - galleryWidth - McnTheme.SPACE_XXS;
             if (inside(x, y, galleryX, sendY, galleryWidth, McnTheme.BUTTON_HEIGHT_SM)) {
-                minecraft.setScreen(new GalleryScreen(menu));
+                minecraft.setScreen(new GalleryScreen(menu, this, null));
                 return true;
             }
 

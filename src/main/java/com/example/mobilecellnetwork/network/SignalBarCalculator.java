@@ -34,4 +34,11 @@ public final class SignalBarCalculator {
         }
         return 0;
     }
+
+    public static int computeCoverageBars(double finalStrength, SignalTier tier) {
+        if (tier == SignalTier.NO_SERVICE || finalStrength <= 0.0D) {
+            return 0;
+        }
+        return Math.clamp((int) Math.ceil(finalStrength * 4.0D), 1, 4);
+    }
 }

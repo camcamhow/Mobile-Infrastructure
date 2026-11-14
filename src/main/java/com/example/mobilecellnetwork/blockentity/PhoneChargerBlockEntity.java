@@ -3,10 +3,13 @@ package com.example.mobilecellnetwork.blockentity;
 import com.example.mobilecellnetwork.config.MobileCellNetworkConfig;
 import com.example.mobilecellnetwork.registry.ModBlockEntities;
 import com.example.mobilecellnetwork.registry.ModDataComponents;
-import com.example.mobilecellnetwork.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -16,15 +19,26 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStorage {
+    private ItemStack displayPhone = ItemStack.EMPTY;
+    private String lastDisplayItem = "";
+    private int displayChargePercent = -1;
+    private int lastDisplayChargePercent = -1;
+    private boolean displayPowered;
+    private boolean lastDisplayPowered;
     private final ItemStackHandler itemHandler = new ItemStackHandler(1) {
         @Override
+        public int getSlotLimit(int slot) {
+            return 1;
+        }
+        @Override
         public boolean isItemValid(int slot, ItemStack stack) {
-            return slot == 0 && stack.is(ModItems.CELLPHONE.get());
+            return slot == 0 && com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack);
         }
 
         @Override
         protected void onContentsChanged(int slot) {
             setChanged();
+            syncDisplay();
         }
     };
     private int energy;
@@ -35,6 +49,75 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
 
     public ItemStackHandler getItemHandler() {
         return itemHandler;
+    }
+
+    private String displayItemId() {
+        ItemStack stack = itemHandler.getStackInSlot(0);
+        return stack.isEmpty() ? "" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+    }
+
+    public ItemStack getDisplayPhone() {
+        return level != null && level.isClientSide ? displayPhone : itemHandler.getStackInSlot(0);
+    }
+
+    private int calculateChargePercent() {
+        ItemStack phone = itemHandler.getStackInSlot(0);
+        if (phone.isEmpty()) return -1;
+        int maxCharge = MobileCellNetworkConfig.PHONE_MAX_CHARGE.get();
+        return (int) Math.clamp((long) phone.getOrDefault(ModDataComponents.PHONE_CHARGE.get(), 0)
+                * 100L / maxCharge, 0L, 100L);
+    }
+
+    public int getDisplayChargePercent() {
+        return level != null && level.isClientSide ? displayChargePercent : calculateChargePercent();
+    }
+
+    public boolean isDisplayPowered() {
+        return level != null && level.isClientSide ? displayPowered : energy > 0;
+    }
+
+    private void syncDisplay() {
+        if (level == null || level.isClientSide) return;
+        String item = displayItemId();
+        int percent = calculateChargePercent();
+        boolean powered = energy > 0;
+        if (!item.equals(lastDisplayItem) || percent != lastDisplayChargePercent || powered != lastDisplayPowered) {
+            lastDisplayItem = item;
+            lastDisplayChargePercent = percent;
+            lastDisplayPowered = powered;
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("displayItem", displayItemId());
+        tag.putInt("displayChargePercent", calculateChargePercent());
+        tag.putBoolean("displayPowered", energy > 0);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        ResourceLocation id = ResourceLocation.tryParse(tag.getString("displayItem"));
+        var item = id == null ? null : BuiltInRegistries.ITEM.get(id);
+        ItemStack stack = item == null ? ItemStack.EMPTY : new ItemStack(item);
+        displayPhone = com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack) ? stack : ItemStack.EMPTY;
+        displayChargePercent = displayPhone.isEmpty() ? -1
+                : Math.clamp(tag.getInt("displayChargePercent"), 0, 100);
+        displayPowered = tag.getBoolean("displayPowered");
+    }
+
+    @Override
+    public void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet,
+                             HolderLookup.Provider registries) {
+        handleUpdateTag(packet.getTag(), registries);
+    }
+
+    @Override
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     public String getChargeStatus() {
@@ -87,6 +170,7 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
         if (!simulate && accepted > 0) {
             energy = stored + accepted;
             setChanged();
+            syncDisplay();
         }
         return accepted;
     }
@@ -98,6 +182,7 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
         if (!simulate && extracted > 0) {
             energy -= extracted;
             setChanged();
+            syncDisplay();
         }
         return extracted;
     }
@@ -118,6 +203,9 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
         if (tag.contains("items")) {
             itemHandler.deserializeNBT(registries, tag.getCompound("items"));
         }
+        lastDisplayItem = displayItemId();
+        lastDisplayChargePercent = calculateChargePercent();
+        lastDisplayPowered = energy > 0;
     }
 
     @Override

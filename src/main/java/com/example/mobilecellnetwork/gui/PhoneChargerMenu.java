@@ -61,15 +61,15 @@ public class PhoneChargerMenu extends AbstractContainerMenu {
                 return 7;
             }
         };
-        addSlot(new SlotItemHandler(handler, 0, 80, 35));
+        addSlot(new SlotItemHandler(handler, 0, 25, 82));
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
                 addSlot(new Slot(inventory, column + row * 9 + 9,
-                        8 + column * 18, 84 + row * 18));
+                        69 + column * 18, 139 + row * 18));
             }
         }
         for (int column = 0; column < 9; column++) {
-            addSlot(new Slot(inventory, column, 8 + column * 18, 142));
+            addSlot(new Slot(inventory, column, 69 + column * 18, 199));
         }
         addDataSlots(data);
     }
@@ -78,7 +78,7 @@ public class PhoneChargerMenu extends AbstractContainerMenu {
         return new ItemStackHandler(1) {
             @Override
             public boolean isItemValid(int slot, ItemStack stack) {
-                return stack.is(ModItems.CELLPHONE.get());
+                return com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack);
             }
         };
     }
@@ -111,7 +111,7 @@ public class PhoneChargerMenu extends AbstractContainerMenu {
         result = stack.copy();
         if (slotIndex == 0) {
             if (!moveItemStackTo(stack, 1, slots.size(), true)) return ItemStack.EMPTY;
-        } else if (stack.is(ModItems.CELLPHONE.get())) {
+        } else if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) {
             if (!moveItemStackTo(stack, 0, 1, false)) return ItemStack.EMPTY;
         } else if (slotIndex < 28) {
             if (!moveItemStackTo(stack, 28, slots.size(), false)) return ItemStack.EMPTY;

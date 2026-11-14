@@ -56,9 +56,10 @@ public final class CallOverlay {
                     PANEL_X + 10, panelY + 12, PhoneColors.textPrimary(style), false);
             graphics.drawString(font, formatDuration(System.currentTimeMillis() - ClientCallCache.startedAtMillis()),
                     PANEL_X + 10, panelY + 30, PhoneColors.textSecondary(style), false);
-            drawButton(graphics, PANEL_X + 9, panelY + 53, 72, 23,
+            drawButton(graphics, PANEL_X + 5, panelY + 53, 52, 23,
                     ClientCallCache.muted() ? "Unmute" : "Mute", PhoneColors.accent(style));
-            drawButton(graphics, PANEL_X + 91, panelY + 53, 72, 23, "Hang up", PhoneColors.error(style));
+            drawButton(graphics, PANEL_X + 62, panelY + 53, 52, 23, "Open", PhoneColors.accent(style));
+            drawButton(graphics, PANEL_X + 119, panelY + 53, 52, 23, "End", PhoneColors.error(style));
         } else {
             graphics.drawString(font, endedMessage(ClientCallCache.reason()),
                     PANEL_X + 10, panelY + 24, 0xFFFFFFFF, false);
@@ -95,10 +96,14 @@ public final class CallOverlay {
                 }
             }
         } else if (mouseY >= panelY + 53 && mouseY <= panelY + 76) {
-            if (mouseX >= PANEL_X + 9 && mouseX <= PANEL_X + 81) {
+            if (mouseX >= PANEL_X + 5 && mouseX < PANEL_X + 57) {
                 send(CallControlPacket.Action.MUTE, !ClientCallCache.muted());
                 event.setCanceled(true);
-            } else if (mouseX >= PANEL_X + 91 && mouseX <= PANEL_X + 163) {
+            } else if (mouseX >= PANEL_X + 62 && mouseX < PANEL_X + 114
+                    && minecraft.screen instanceof PhoneNavigableScreen phone) {
+                minecraft.setScreen(new CallScreen(phone.phoneMenu(), ""));
+                event.setCanceled(true);
+            } else if (mouseX >= PANEL_X + 119 && mouseX < PANEL_X + 171) {
                 send(CallControlPacket.Action.HANG_UP, false);
                 event.setCanceled(true);
             }

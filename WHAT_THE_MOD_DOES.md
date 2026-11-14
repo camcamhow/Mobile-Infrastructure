@@ -48,11 +48,12 @@ In vanilla Minecraft, players communicate via standard global chat. Mobile Cell 
 Right-clicking the **Cellphone** item opens a custom, responsive mobile OS:
 - **Status Bar:** Real-time indicator displaying the current network carrier (or roaming indicator), in-game time, cellular tier badge (`E`, `E+`, `2G`, `3G`, `H`, `H+`, `4G`, `4G+`, `LTE`, `5G`, `5G+`), dynamic 4-bar signal strength that drops one bar at a time and refills when the tier drops, and battery percentage.
 - **On-Screen HUD:** When the phone is held in the main hand or off-hand, a compact status bar overlay is visible directly on the player HUD above the hotbar.
-- **OS Styles:** Switch between a dark **Samsung One UI-inspired** layout and a clean, light **Apple iOS-inspired** layout in Settings.
+- **OS Styles:** Switch between a dark **Samsung One UI-inspired** layout and **Snapple** in Settings.
+- **Phone item:** The existing cellphone uses an original rounded 3D model with a screen, metallic sides and rear cameras. It must still be held normally; camera and flashlight do not automatically move it into a hand.
 - **Navigation:** Functional Back button, Home button, and gesture indicator.
-- **Home Screen:** The home screen uses a chrome-bezel phone frame, an OS-aware status bar, a search bar, and a 4-column app grid with brand-colored icon tiles and notification badges.
+- **Home Screen:** Snapple uses the same 3D model as the held cellphone, a camera cutout, original wallpaper, date and network widgets, app grid, search, and a dock. The lock screen shares its wallpaper and has a styled PIN keypad. Existing apps retain their current layouts.
 - **App Search:** Live filter bar on the home screen to quickly search installed apps.
-- Lock screen with swipe-up to unlock and optional PIN entry. Each physical phone has a unique ID that persists with the item, so finding another player's phone grants access to their messages, contacts, and (partially) their bank app.
+- Lock screen with a swipe-up gesture from the bottom to unlock and optional PIN entry. Each physical phone has a unique ID that persists with the item, so finding another player's phone grants access to their messages, contacts, and (partially) their bank app.
 
 ### Built-In Smartphone Apps
 

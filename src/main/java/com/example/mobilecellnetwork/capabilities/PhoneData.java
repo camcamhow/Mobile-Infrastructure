@@ -30,6 +30,8 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
     private String phoneNumber = "";
     private final Map<String, String> contacts = new LinkedHashMap<>();
     private final Set<String> installedApps = new LinkedHashSet<>();
+    private final Set<String> purchasedApps = new LinkedHashSet<>();
+    private final List<String> homeAppOrder = new ArrayList<>();
     private final Set<java.util.UUID> followedPlayers = new LinkedHashSet<>();
     private String socialUsername = "";
     private int socialProfileColor = 0xFF4F7CAC;
@@ -51,6 +53,10 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
     private boolean doNotDisturb;
     private String ringtoneSound = "minecraft:block.note_block.bell";
     private PhoneStyle phoneStyle = PhoneStyle.configuredDefault();
+    private String profilePhoto = "";
+    private String appearance = "default";
+    private boolean setupComplete = true;
+    private String deviceName = "";
     private String theme = phoneStyle == PhoneStyle.IOS ? "iphone" : "samsung";
     private String lastKnownPlanId = "";
     private String homeNetworkId = "";
@@ -68,9 +74,24 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
     }
 
     public String getPhoneNumber() { return phoneNumber; }
+    public String getProfilePhoto() { return profilePhoto; }
+    public void setProfilePhoto(String photo) { profilePhoto = photo; }
+    public String getAppearance() { return appearance; }
+    public boolean isSetupComplete() { return setupComplete; }
+    public void setSetupComplete(boolean value) { setupComplete = value; }
+    public String getDeviceName() { return deviceName; }
+    public void setDeviceName(String value) { deviceName = value; }
+    public void setAppearance(String value) {
+        if (!"default".equals(value) && !"light".equals(value) && !"dark".equals(value)) {
+            throw new IllegalArgumentException("Invalid phone appearance.");
+        }
+        appearance = value;
+    }
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
     public Map<String, String> getContacts() { return contacts; }
     public Set<String> getInstalledApps() { return installedApps; }
+    public Set<String> getPurchasedApps() { return purchasedApps; }
+    public List<String> getHomeAppOrder() { return homeAppOrder; }
     public boolean canUseApp(String appId) {
         if ("settings".equals(appId) || "store".equals(appId) || "plan".equals(appId)) {
             return true;
@@ -198,6 +219,10 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
         tag.putString("ringtoneSound", ringtoneSound);
         tag.putString("theme", theme);
         tag.putString("phoneStyle", phoneStyle.name());
+        tag.putString("profilePhoto", profilePhoto);
+        tag.putString("appearance", appearance);
+        tag.putBoolean("setupComplete", setupComplete);
+        tag.putString("deviceName", deviceName);
         tag.putString("lastKnownPlanId", lastKnownPlanId);
         tag.putString("homeNetworkId", homeNetworkId);
         tag.putString("towerMode", towerMode.name());
@@ -214,6 +239,12 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
         ListTag apps = new ListTag();
         installedApps.forEach(app -> apps.add(net.minecraft.nbt.StringTag.valueOf(app)));
         tag.put("installedApps", apps);
+        ListTag purchased = new ListTag();
+        purchasedApps.forEach(app -> purchased.add(net.minecraft.nbt.StringTag.valueOf(app)));
+        tag.put("purchasedApps", purchased);
+        ListTag order = new ListTag();
+        homeAppOrder.forEach(app -> order.add(net.minecraft.nbt.StringTag.valueOf(app)));
+        tag.put("homeAppOrder", order);
         ListTag follows = new ListTag();
         followedPlayers.forEach(id -> {
             CompoundTag entry = new CompoundTag();
@@ -243,6 +274,12 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
     @Override
     public void deserializeNBT(HolderLookup.Provider registries, CompoundTag tag) {
         phoneNumber = tag.getString("phoneNumber");
+        profilePhoto = tag.getString("profilePhoto");
+        setupComplete = !tag.contains("setupComplete") || tag.getBoolean("setupComplete");
+        deviceName = tag.getString("deviceName");
+        String savedAppearance = tag.getString("appearance");
+        appearance = "light".equals(savedAppearance) || "dark".equals(savedAppearance)
+                ? savedAppearance : "default";
         lowPowerMode = tag.getBoolean("lowPowerMode");
         lockScreenEnabled = !tag.contains("lockScreenEnabled") || tag.getBoolean("lockScreenEnabled");
         ringtoneEnabled = !tag.contains("ringtoneEnabled") || tag.getBoolean("ringtoneEnabled");
@@ -286,6 +323,16 @@ public final class PhoneData implements INBTSerializable<CompoundTag> {
             installedApps.add(app.getAsString());
         }
         installedApps.addAll(List.of("camera", "gallery"));
+        purchasedApps.clear();
+        if (tag.contains("purchasedApps", Tag.TAG_LIST)) {
+            for (Tag app : tag.getList("purchasedApps", Tag.TAG_STRING)) purchasedApps.add(app.getAsString());
+        } else {
+            for (String app : List.of("socials", "ringtones")) {
+                if (installedApps.contains(app)) purchasedApps.add(app);
+            }
+        }
+        homeAppOrder.clear();
+        for (Tag app : tag.getList("homeAppOrder", Tag.TAG_STRING)) homeAppOrder.add(app.getAsString());
         followedPlayers.clear();
         for (Tag value : tag.getList("followedPlayers", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) value;

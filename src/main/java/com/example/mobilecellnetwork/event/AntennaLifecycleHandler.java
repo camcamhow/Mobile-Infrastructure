@@ -24,8 +24,16 @@ public final class AntennaLifecycleHandler {
             return;
         }
         BlockPos position = event.getPos();
-        if (level.getBlockEntity(position) instanceof AntennaBlockEntity) {
-            savedData(level).unregisterAntenna(level.dimension().location(), position);
+        var state = event.getState();
+        if (state.is(com.example.mobilecellnetwork.registry.ModBlocks.TEST_TOWER_SECTION.get())) {
+            BlockPos base = position.below(state.getValue(
+                    com.example.mobilecellnetwork.block.TestTowerSectionBlock.OFFSET));
+            var baseState = level.getBlockState(base);
+            if (baseState.is(com.example.mobilecellnetwork.registry.ModBlocks.TEST_ANTENNA.get())) {
+                var baseEvent = new BlockEvent.BreakEvent(level, base, baseState, event.getPlayer());
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(baseEvent);
+                if (baseEvent.isCanceled()) event.setCanceled(true);
+            }
         }
     }
 
@@ -50,7 +58,9 @@ public final class AntennaLifecycleHandler {
         ServerLevel overworld = event.getServer().overworld();
         NetworkSavedData data = NetworkSavedData.get(overworld);
         List<AntennaKey> stale = new ArrayList<>();
-        for (String encoded : data.getAntennaNetworks().keySet()) {
+        java.util.Set<String> antennaKeys = new java.util.HashSet<>(data.getAntennaNetworks().keySet());
+        data.getNetworks().values().forEach(network -> antennaKeys.addAll(network.towers()));
+        for (String encoded : antennaKeys) {
             int separator = encoded.lastIndexOf('@');
             if (separator <= 0) {
                 stale.add(new AntennaKey(null, BlockPos.ZERO, encoded));
@@ -77,13 +87,7 @@ public final class AntennaLifecycleHandler {
                 stale.add(new AntennaKey(dimension, position, encoded));
             }
         }
-        stale.forEach(key -> {
-            if (key.dimension() == null) {
-                data.unregisterAntenna(key.encoded());
-            } else {
-                data.unregisterAntenna(key.dimension(), key.position());
-            }
-        });
+        stale.forEach(key -> data.unregisterAntenna(key.encoded()));
     }
 
     private static NetworkSavedData savedData(ServerLevel level) {

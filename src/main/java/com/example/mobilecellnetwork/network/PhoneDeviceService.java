@@ -55,7 +55,7 @@ public final class PhoneDeviceService {
     }
 
     public static UUID prepareAndOpen(ServerPlayer player, ItemStack stack) {
-        if (!stack.is(ModItems.CELLPHONE.get())) {
+        if (!com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) {
             throw new IllegalArgumentException("A cellphone stack is required.");
         }
         UUID phoneId = stack.get(ModDataComponents.PHONE_ID.get());
@@ -73,7 +73,9 @@ public final class PhoneDeviceService {
         PhoneDeviceSavedData devices = savedData(player);
         PhoneDeviceSavedData.DeviceRecord device = devices.get(phoneId);
         if (device == null) {
-            device = devices.register(phoneId, player.getUUID(), playerData.serializeNBT(player.registryAccess()),
+            CompoundTag initialProfile = playerData.serializeNBT(player.registryAccess());
+            initialProfile.putBoolean("setupComplete", false);
+            device = devices.register(phoneId, player.getUUID(), initialProfile,
                     player.getData(ModCapabilities.BANK_ACCOUNT).getBalance(), locks, pinHash);
         } else if (device.ownerId().equals(player.getUUID())) {
             devices.ownedBy(player.getUUID()).stream().map(PhoneDeviceSavedData.DeviceRecord::phoneId)
@@ -91,10 +93,18 @@ public final class PhoneDeviceService {
 
         CompoundTag personalProfile = playerData.serializeNBT(player.registryAccess());
         devices.saveActiveBackup(player.getUUID(), personalProfile);
-        boolean requiresUnlock = device.profile().getBoolean("lockScreenEnabled") || !device.pinHash().isBlank();
+        boolean requiresUnlock = device.profile().getBoolean("setupComplete")
+                && (device.profile().getBoolean("lockScreenEnabled") || !device.pinHash().isBlank());
+        if (!device.profile().contains("setupComplete")) {
+            requiresUnlock = device.profile().getBoolean("lockScreenEnabled") || !device.pinHash().isBlank();
+        }
         ACTIVE_SESSIONS.put(player.getUUID(),
                 new Session(phoneId, personalProfile, device.ownerId(), -1, !requiresUnlock));
         playerData.deserializeNBT(player.registryAccess(), device.profile());
+        if (stack.getItem() instanceof com.example.mobilecellnetwork.item.CellphoneItem phone
+                && phone.fixedStyle() != null) {
+            playerData.setPhoneStyle(phone.fixedStyle());
+        }
         Integer itemCharge = stack.get(ModDataComponents.PHONE_CHARGE.get());
         if (itemCharge != null) {
             playerData.setCharge(itemCharge);
@@ -140,6 +150,21 @@ public final class PhoneDeviceService {
         return session == null ? null : session.phoneId();
     }
 
+    public static com.example.mobilecellnetwork.gui.PhoneStyle activeFixedStyle(ServerPlayer player) {
+        UUID id = activePhoneId(player);
+        ItemStack stack = id == null ? ItemStack.EMPTY : findPhone(player, id);
+        return stack.getItem() instanceof com.example.mobilecellnetwork.item.CellphoneItem phone
+                ? phone.fixedStyle() : null;
+    }
+
+    public static void saveActiveProfile(ServerPlayer player) {
+        UUID phoneId = activePhoneId(player);
+        if (phoneId != null) {
+            savedData(player).saveProfile(phoneId,
+                    player.getData(ModCapabilities.PHONE_DATA).serializeNBT(player.registryAccess()));
+        }
+    }
+
     public static boolean isPhoneInInventory(ServerPlayer player, UUID phoneId) {
         return phoneId != null && !findPhone(player, phoneId).isEmpty();
     }
@@ -147,6 +172,57 @@ public final class PhoneDeviceService {
     public static boolean activeDeviceOwnedBy(ServerPlayer player) {
         Session session = ACTIVE_SESSIONS.get(player.getUUID());
         return session != null && player.getUUID().equals(session.ownerId());
+    }
+
+    public static boolean completeSetup(ServerPlayer player, PhoneSetupPacket packet) {
+        PhoneData data = player.getData(ModCapabilities.PHONE_DATA);
+        if (!hasActiveDevice(player, packet.phoneId()) || !activeDeviceOwnedBy(player)
+                || data.isSetupComplete() || packet.name().isBlank() || packet.name().length() > 32
+                || packet.name().chars().anyMatch(Character::isISOControl)
+                || (!packet.appearance().equals("light") && !packet.appearance().equals("dark"))
+                || (!packet.pin().isEmpty() && !packet.pin().matches("[0-9]{4,12}"))
+                || (!packet.photo().isEmpty() && !hasPhoto(player, packet.photo()))) {
+            return false;
+        }
+        data.setDeviceName(packet.name().strip());
+        data.setAppearance(packet.appearance());
+        data.setProfilePhoto(packet.photo());
+        data.setSetupComplete(true);
+        savedData(player).setPinHash(packet.phoneId(),
+                packet.pin().isEmpty() ? "" : hashPin(packet.phoneId(), packet.pin()));
+        savedData(player).saveProfile(packet.phoneId(), data.serializeNBT(player.registryAccess()));
+        syncItem(player, packet.phoneId());
+        sendState(player);
+        NetworkHandler.syncPhoneData(player);
+        return true;
+    }
+
+    public static boolean factoryReset(ServerPlayer player, UUID phoneId) {
+        if (!hasActiveDevice(player, phoneId) || !activeDeviceOwnedBy(player)
+                || player.server.getPlayerList().getPlayers().stream()
+                .anyMatch(other -> !other.getUUID().equals(player.getUUID())
+                        && phoneId.equals(activePhoneId(other)))) {
+            return false;
+        }
+        PhoneData current = player.getData(ModCapabilities.PHONE_DATA);
+        PhoneData fresh = new PhoneData();
+        fresh.setPhoneNumber(current.getPhoneNumber());
+        fresh.setPhoneStyle(current.getPhoneStyle());
+        fresh.setLastKnownPlanId(current.getLastKnownPlanId());
+        fresh.setHomeNetworkId(current.getHomeNetworkId());
+        fresh.setCharge(current.getCharge());
+        current.getKnownPhoneIds().forEach(fresh::addKnownPhoneId);
+        fresh.setSetupComplete(false);
+        current.deserializeNBT(player.registryAccess(), fresh.serializeNBT(player.registryAccess()));
+        current.setActivePhoneId(phoneId);
+        current.setFlashlightOn(false);
+        savedData(player).clearPhotos(phoneId);
+        savedData(player).setPinHash(phoneId, "");
+        savedData(player).saveProfile(phoneId, current.serializeNBT(player.registryAccess()));
+        syncItem(player, phoneId);
+        PacketDistributor.sendToPlayer(player, new PhonePhotoListPacket(phoneId, List.of()));
+        sendState(player, true);
+        return true;
     }
 
     public static PhoneDeviceSavedData.DeviceRecord activeDevice(ServerPlayer player) {
@@ -296,9 +372,16 @@ public final class PhoneDeviceService {
         syncItem(player, targetId);
         for (ServerPlayer online : player.server.getPlayerList().getPlayers()) {
             if (targetId.equals(activePhoneId(online))) {
-                online.getData(ModCapabilities.PHONE_DATA)
-                        .deserializeNBT(online.registryAccess(), wipedProfile);
-                online.getData(ModCapabilities.PHONE_DATA).setActivePhoneId(targetId);
+                PhoneData data = online.getData(ModCapabilities.PHONE_DATA);
+                data.deserializeNBT(online.registryAccess(), wipedProfile);
+                var fixedStyle = activeFixedStyle(online);
+                if (fixedStyle != null) {
+                    data.setPhoneStyle(fixedStyle);
+                    savedData(online).saveProfile(targetId, data.serializeNBT(online.registryAccess()));
+                    PacketDistributor.sendToPlayer(online, new PhoneStyleSyncPacket(fixedStyle));
+                }
+                data.setActivePhoneId(targetId);
+                NetworkHandler.syncPhoneData(online);
             }
         }
         syncActiveTarget(player, targetId);
@@ -317,6 +400,30 @@ public final class PhoneDeviceService {
             return false;
         }
         return savedData(player).savePhoto(phoneId, name, image);
+    }
+
+    public static boolean hasPhoto(ServerPlayer player, String name) {
+        UUID phoneId = activePhoneId(player);
+        return hasActiveDevice(player, phoneId) && savedData(player).getPhotos(phoneId).containsKey(name);
+    }
+
+    public static boolean deletePhoto(ServerPlayer player, UUID phoneId, String name) {
+        if (!hasActiveDevice(player, phoneId) || !savedData(player).deletePhoto(phoneId, name)) {
+            return false;
+        }
+        for (ServerPlayer online : player.server.getPlayerList().getPlayers()) {
+            if (!phoneId.equals(activePhoneId(online))) {
+                continue;
+            }
+            PhoneData data = online.getData(ModCapabilities.PHONE_DATA);
+            if (name.equals(data.getProfilePhoto())) {
+                data.setProfilePhoto("");
+                savedData(player).saveProfile(phoneId, data.serializeNBT(online.registryAccess()));
+                NetworkHandler.syncPhoneData(online);
+            }
+            PacketDistributor.sendToPlayer(online, new PhonePhotoDeletedPacket(phoneId, name));
+        }
+        return true;
     }
 
     public static void sendPhotos(ServerPlayer player, UUID phoneId) {
@@ -349,7 +456,9 @@ public final class PhoneDeviceService {
                 !device.pinHash().isBlank(), device.isLocked(ALL_LOCK), device.isLocked(BANK_LOCK),
                 !player.getUUID().equals(device.ownerId()),
                 player.getData(ModCapabilities.PHONE_DATA).getNotifications().stream()
-                        .anyMatch(notification -> !notification.read()), clearSensitiveData));
+                        .anyMatch(notification -> !notification.read()), clearSensitiveData,
+                player.getData(ModCapabilities.PHONE_DATA).getAppearance(),
+                player.getData(ModCapabilities.PHONE_DATA).isSetupComplete()));
     }
 
     public static void syncBankView(ServerPlayer player) {
@@ -428,7 +537,7 @@ public final class PhoneDeviceService {
     }
 
     private static void syncStack(ItemStack stack, PhoneDeviceSavedData.DeviceRecord device) {
-        if (stack.isEmpty() || !stack.is(ModItems.CELLPHONE.get())
+        if (stack.isEmpty() || !com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)
                 || !device.phoneId().equals(stack.get(ModDataComponents.PHONE_ID.get()))) {
             return;
         }
@@ -467,7 +576,7 @@ public final class PhoneDeviceService {
     }
 
     private static boolean matches(ItemStack stack, UUID phoneId) {
-        return !stack.isEmpty() && stack.is(ModItems.CELLPHONE.get())
+        return !stack.isEmpty() && com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)
                 && phoneId.equals(stack.get(ModDataComponents.PHONE_ID.get()));
     }
 

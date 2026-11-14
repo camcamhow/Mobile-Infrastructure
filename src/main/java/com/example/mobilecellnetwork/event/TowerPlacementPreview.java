@@ -67,7 +67,7 @@ public final class TowerPlacementPreview {
         if (stack.is(ModItems.IRON_ANTENNA.get())) {
             return AntennaTier.IRON;
         }
-        if (stack.is(ModItems.DIAMOND_ANTENNA.get())) {
+        if (stack.is(ModItems.DIAMOND_ANTENNA.get()) || stack.is(ModItems.TEST_ANTENNA.get())) {
             return AntennaTier.DIAMOND;
         }
         return null;

@@ -49,7 +49,7 @@ public final class NetworkHandler {
     }
 
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+        PayloadRegistrar registrar = event.registrar("10");
         registrar.playToServer(AntennaConfigActionPacket.TYPE, AntennaConfigActionPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
                         AntennaConfigHandler.handle(context.player(), packet)));
@@ -61,6 +61,20 @@ public final class NetworkHandler {
                 });
         registrar.playToClient(OpenPhoneScreenPacket.TYPE, OpenPhoneScreenPacket.STREAM_CODEC,
                 OpenPhoneScreenPacket::handle);
+        registrar.playToServer(OpenHeldPhonePacket.TYPE, OpenHeldPhonePacket.STREAM_CODEC,
+                (packet, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        var main = player.getMainHandItem();
+                        var off = player.getOffhandItem();
+                        if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(main)) {
+                            com.example.mobilecellnetwork.item.CellphoneItem.openPhone(player, main, true);
+                        } else if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(off)) {
+                            com.example.mobilecellnetwork.item.CellphoneItem.openPhone(player, off, true);
+                        } else {
+                            player.displayClientMessage(Component.translatable("message.mobilecellnetwork.hold_phone"), true);
+                        }
+                    }
+                }));
         registrar.playToClient(PhoneDeviceStatePacket.TYPE, PhoneDeviceStatePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> {
                     java.util.UUID priorPhoneId = PhoneDeviceClientCache.phoneId();
@@ -74,8 +88,17 @@ public final class NetworkHandler {
                         ClientPlanCache.clearSensitiveData();
                     }
                     PhoneDeviceClientCache.update(packet);
+                    ClientPhoneCache.setAppearance(packet.appearance());
                     com.example.mobilecellnetwork.gui.PhonePhotoLibrary.setActivePhoneId(packet.phoneId());
                     var current = net.minecraft.client.Minecraft.getInstance().screen;
+                    if (!packet.setupComplete() && !packet.lockedAll()
+                            && current instanceof com.example.mobilecellnetwork.gui.DeviceSettingsScreen phoneScreen) {
+                        net.minecraft.client.Minecraft.getInstance().setScreen(
+                                new com.example.mobilecellnetwork.gui.PhoneSetupScreen(phoneScreen.phoneMenu()));
+                    } else if (packet.setupComplete()
+                            && current instanceof com.example.mobilecellnetwork.gui.PhoneSetupScreen setup) {
+                        setup.completed();
+                    }
                     if (packet.lockedAll() && current instanceof com.example.mobilecellnetwork.gui.PhoneNavigableScreen phoneScreen
                             && phoneScreen.phoneMenu() != null) {
                         net.minecraft.client.Minecraft.getInstance().setScreen(
@@ -92,10 +115,28 @@ public final class NetworkHandler {
                 (packet, context) -> context.enqueueWork(() ->
                         com.example.mobilecellnetwork.gui.PhonePhotoLibrary.saveRemotePhoto(
                                 packet.phoneId(), packet.name(), packet.image())));
+        registrar.playToClient(PhonePhotoDeletedPacket.TYPE, PhonePhotoDeletedPacket.STREAM_CODEC,
+                (packet, context) -> context.enqueueWork(() ->
+                        com.example.mobilecellnetwork.gui.PhonePhotoLibrary.removeRemotePhoto(
+                                packet.phoneId(), packet.name())));
         registrar.playToClient(KnownPhoneDevicesPacket.TYPE, KnownPhoneDevicesPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> PhoneDeviceClientCache.updateDevices(packet)));
         registrar.playToServer(UnlockPhonePacket.TYPE, UnlockPhonePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handlePhoneUnlock(context.player(), packet)));
+        registrar.playToServer(PhoneSetupPacket.TYPE, PhoneSetupPacket.STREAM_CODEC,
+                (packet, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player
+                            && !PhoneDeviceService.completeSetup(player, packet)) {
+                        notifyPlayer(player, "Setup failed. Check your choices and phone ownership.");
+                    }
+                }));
+        registrar.playToServer(PhoneFactoryResetPacket.TYPE, PhoneFactoryResetPacket.STREAM_CODEC,
+                (packet, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player
+                            && !PhoneDeviceService.factoryReset(player, packet.phoneId())) {
+                        notifyPlayer(player, "Factory reset failed. Check phone ownership and active sessions.");
+                    }
+                }));
         registrar.playToServer(SetPhonePinPacket.TYPE, SetPhonePinPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleSetPhonePin(context.player(), packet)));
         registrar.playToServer(RemovePhonePinPacket.TYPE, RemovePhonePinPacket.STREAM_CODEC,
@@ -124,6 +165,13 @@ public final class NetworkHandler {
                         notifyPlayer(player, "Could not save this photo to the active phone.");
                     }
                 }));
+        registrar.playToServer(PhonePhotoDeletePacket.TYPE, PhonePhotoDeletePacket.STREAM_CODEC,
+                (packet, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player
+                            && !PhoneDeviceService.deletePhoto(player, packet.phoneId(), packet.name())) {
+                        notifyPlayer(player, "Could not delete that photo from the active phone.");
+                    }
+                }));
         registrar.playToClient(PhoneDataSyncPacket.TYPE, PhoneDataSyncPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ClientPhoneCache.update(packet)));
         registrar.playToClient(PhoneStyleSyncPacket.TYPE, PhoneStyleSyncPacket.STREAM_CODEC,
@@ -149,8 +197,11 @@ public final class NetworkHandler {
                 (packet, context) -> context.enqueueWork(() -> handleAntennaShare(context.player(), packet)));
         registrar.playToServer(RemoveAntennaSharePacket.TYPE, RemoveAntennaSharePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleAntennaUnshare(context.player(), packet)));
-        registrar.playToClient(RoamingProposalPacket.TYPE, RoamingProposalPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> handleClientRoamingProposal(packet)));
+        registrar.playBidirectional(RoamingProposalPacket.TYPE, RoamingProposalPacket.STREAM_CODEC,
+                new net.neoforged.neoforge.network.handling.DirectionalPayloadHandler<>(
+                        (packet, context) -> context.enqueueWork(() -> handleClientRoamingProposal(packet)),
+                        (packet, context) -> context.enqueueWork(() ->
+                                handleRoamingProposal(context.player(), packet))));
         registrar.playToServer(RoamingProposalResponsePacket.TYPE, RoamingProposalResponsePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleRoamingProposalResponse(context.player(), packet)));
         registrar.playToClient(RoamingAgreementSyncPacket.TYPE, RoamingAgreementSyncPacket.STREAM_CODEC,
@@ -181,6 +232,10 @@ public final class NetworkHandler {
                 (packet, context) -> context.enqueueWork(() -> ClientServerAdminCache.update(packet)));
         registrar.playToClient(NetworkCreationResultPacket.TYPE, NetworkCreationResultPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> {
+                    if (net.minecraft.client.Minecraft.getInstance().screen
+                            instanceof com.example.mobilecellnetwork.gui.NetworkEditorScreen editor) {
+                        editor.creationResult(packet.success(), packet.message());
+                    }
                     if (packet.success()) {
                         com.example.mobilecellnetwork.gui.admin.AdminToast.success(packet.message());
                     } else {
@@ -224,13 +279,21 @@ public final class NetworkHandler {
                 (packet, context) -> context.enqueueWork(() -> handleCallControl(context.player(), packet)));
         registrar.playToClient(CallStatePacket.TYPE, CallStatePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ClientCallCache.update(packet)));
+        registrar.playBidirectional(VideoCallPacket.TYPE, VideoCallPacket.STREAM_CODEC,
+                new net.neoforged.neoforge.network.handling.DirectionalPayloadHandler<>(
+                        (packet, context) -> context.enqueueWork(() ->
+                                com.example.mobilecellnetwork.gui.VideoCallClient.receive(packet)),
+                        (packet, context) -> context.enqueueWork(() -> {
+                            if (context.player() instanceof ServerPlayer player) CallManager.handleVideo(player, packet);
+                        })));
         registrar.playToServer(ContactActionPacket.TYPE, ContactActionPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleContact(context.player(), packet)));
         registrar.playToServer(ContactsActionPacket.TYPE, ContactsActionPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleContactsAction(context.player(), packet)));
         registrar.playToServer(AppInstallPacket.TYPE, AppInstallPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> ConnectionDelayService.submit(context.player(),
-                        () -> handleAppInstall(context.player(), packet))));
+                (packet, context) -> context.enqueueWork(() -> scheduleAppInstall(context.player(), packet)));
+        registrar.playToServer(HomeAppActionPacket.TYPE, HomeAppActionPacket.STREAM_CODEC,
+                (packet, context) -> context.enqueueWork(() -> handleHomeAppAction(context.player(), packet)));
         registrar.playToServer(BankTransferPacket.TYPE, BankTransferPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ConnectionDelayService.submit(context.player(),
                         () -> handleBankTransfer(context.player(), packet))));
@@ -344,7 +407,7 @@ public final class NetworkHandler {
                     }
                 }));
         registrar.playToServer(PlanSelectPacket.TYPE, PlanSelectPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> ConnectionDelayService.submit(context.player(),
+                (packet, context) -> context.enqueueWork(() -> ConnectionDelayService.submitForPlanSelection(context.player(),
                         () -> handlePlanSelect(context.player(), packet))));
         registrar.playToClient(LowPowerStatePacket.TYPE, LowPowerStatePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ClientPhoneCache.updateLowPowerState(packet.enabled())));
@@ -358,6 +421,15 @@ public final class NetworkHandler {
                         net.minecraft.client.Minecraft.getInstance().setScreen(
                                 new com.example.mobilecellnetwork.gui.LowPowerPromptScreen(packet.title(), packet.message()));
                     } else if (net.minecraft.client.Minecraft.getInstance().player != null) {
+                        if ("Plan editor".equals(packet.title())
+                                && net.minecraft.client.Minecraft.getInstance().screen
+                                instanceof com.example.mobilecellnetwork.gui.EditPlanModal editor) {
+                            editor.saveResult("Plan saved.".equals(packet.message()), packet.message());
+                        } else if ("Plan selection".equals(packet.title())
+                                && net.minecraft.client.Minecraft.getInstance().screen
+                                instanceof com.example.mobilecellnetwork.gui.PlanScreen screen) {
+                            screen.selectionResult(packet.message());
+                        }
                         ClientSmsCache.addToast(packet.title(), packet.message());
                     }
                 }));
@@ -379,9 +451,6 @@ public final class NetworkHandler {
         registrar.playToServer(ToggleNetworkRoamingPacket.TYPE, ToggleNetworkRoamingPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
                         handleToggleNetworkRoaming(context.player(), packet)));
-        registrar.playToServer(RoamingProposalPacket.TYPE, RoamingProposalPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() ->
-                        handleRoamingProposal(context.player(), packet)));
         registrar.playToServer(RoamingResponsePacket.TYPE, RoamingResponsePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
                         handleRoamingResponse(context.player(), packet)));
@@ -406,7 +475,7 @@ public final class NetworkHandler {
         }
         NetworkSavedData data = NetworkSavedData.get(player.server.overworld());
         NetworkSavedData.NetworkRecord network = data.getNetwork(packet.networkId());
-        if (network == null || !(player.hasPermissions(2) || player.getUUID().equals(network.ownerUUID()))) {
+        if (network == null || !player.getUUID().equals(network.ownerUUID())) {
             notifyPlayer(player, "You cannot manage that network.");
             return;
         }
@@ -785,12 +854,13 @@ public final class NetworkHandler {
             return;
         }
         var result = com.example.mobilecellnetwork.plans.PlanSubscriptionHandler.selectPlan(player, planId);
-        notifyPlayer(player, switch (result) {
+        String message = switch (result) {
             case SUCCESS -> "Plan activated.";
             case INSUFFICIENT_FUNDS -> "Insufficient funds to select that plan.";
             case PLAN_NOT_FOUND -> "That plan is not available.";
             case PLAN_ALREADY_ACTIVE -> "You already have this plan.";
-        });
+        };
+        PacketDistributor.sendToPlayer(player, new PhoneNotificationPacket("SYSTEM", "Plan selection", message, false));
     }
 
     private static void handlePlanCancellation(net.minecraft.world.entity.player.Player sender) {
@@ -889,8 +959,11 @@ public final class NetworkHandler {
         PacketDistributor.sendToPlayer(player, new PhoneDataSyncPacket(
                 data.getPhoneNumber(), plan.getActivePlanId(), data.isLowPowerMode(), data.isDead(),
                 data.isRingtoneEnabled(), data.isNotificationSoundsEnabled(), data.isDoNotDisturb(),
-                data.getRingtoneSound(), data.getTheme(), contacts, notifications, online,
-                data.getInstalledApps().stream().toList(), followed, appNotificationSettings));
+                data.getRingtoneSound(), data.getTheme(), data.getProfilePhoto(), data.getAppearance(), data.getDeviceName(),
+                contacts, notifications, online,
+                data.getInstalledApps().stream().toList(), List.copyOf(data.getHomeAppOrder()),
+                List.copyOf(data.getPurchasedApps()),
+                followed, appNotificationSettings));
         PacketDistributor.sendToPlayer(player, new PhoneStyleSyncPacket(data.getPhoneStyle()));
         PhoneDeviceService.syncBankView(player);
         PacketDistributor.sendToPlayer(player, SmsDataSyncPacket.from(data));
@@ -996,8 +1069,30 @@ public final class NetworkHandler {
                 && number != null && number.matches("[0-9]{1,9}");
     }
 
+    private static void scheduleAppInstall(net.minecraft.world.entity.player.Player sender, AppInstallPacket packet) {
+        if (!(sender instanceof ServerPlayer player) || !hasPhoneMenu(player)) return;
+        if (!hasActivePlan(player)) {
+            notifyPlayer(player, "Choose an active plan to download apps.");
+            return;
+        }
+        java.util.UUID phoneId = PhoneDeviceService.activePhoneId(player);
+        int menuId = player.containerMenu.containerId;
+        ConnectionDelayService.submit(player, () -> {
+            if (player.containerMenu.containerId != menuId
+                    || !java.util.Objects.equals(phoneId, PhoneDeviceService.activePhoneId(player))) {
+                notifyPlayer(player, "App install cancelled because the phone was closed or changed.");
+                return;
+            }
+            handleAppInstall(player, packet);
+        });
+    }
+
     private static void handleAppInstall(net.minecraft.world.entity.player.Player sender, AppInstallPacket packet) {
         if (!(sender instanceof ServerPlayer player) || !hasPhoneMenu(player)) {
+            return;
+        }
+        if (!hasActivePlan(player)) {
+            notifyPlayer(player, "Choose an active plan to download apps.");
             return;
         }
         String appId = packet.appId();
@@ -1018,17 +1113,63 @@ public final class NetworkHandler {
             return;
         }
         var account = player.getData(com.example.mobilecellnetwork.capabilities.ModCapabilities.BANK_ACCOUNT);
-        if (account.getBalance() < price) {
+        long charge = data.getPurchasedApps().contains(appId) ? 0L : price;
+        if (account.getBalance() < charge) {
             notifyPlayer(player, "Insufficient funds.");
             return;
         }
-        if (price > 0) {
-            account.setBalance(account.getBalance() - price);
+        if (charge > 0) {
+            account.setBalance(account.getBalance() - charge);
             account.getTransactionHistory().add(new com.example.mobilecellnetwork.capabilities.BankAccount.Transaction(
-                    -price, "App purchase: " + appId, player.serverLevel().getGameTime()));
+                    -charge, "App purchase: " + appId, player.serverLevel().getGameTime()));
             syncBankAccount(player);
         }
+        if (price > 0) data.getPurchasedApps().add(appId);
         data.getInstalledApps().add(appId);
+        PhoneDeviceService.saveActiveProfile(player);
+        sendPhoneData(player);
+    }
+
+    private static boolean hasActivePlan(ServerPlayer player) {
+        PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
+        return usage.isCycleActive() && !usage.getActivePlanId().isBlank()
+                && PlanRegistry.findPlan(usage.getActivePlanId()) != null;
+    }
+
+    private static void handleHomeAppAction(net.minecraft.world.entity.player.Player sender, HomeAppActionPacket packet) {
+        if (!(sender instanceof ServerPlayer player) || !hasPhoneMenu(player)) return;
+        PhoneData data = player.getData(ModCapabilities.PHONE_DATA);
+        if (data.isDead() || data.isLowPowerMode()) {
+            notifyPlayer(player, "Home screen editing is unavailable in this power mode.");
+            sendPhoneData(player);
+            return;
+        }
+        if ("order".equals(packet.action())) {
+            java.util.Set<String> allowed = java.util.Set.of("phone", "sms", "contacts", "map", "store",
+                    "socials", "bank", "settings", "plan", "voicemail", "camera", "gallery", "flashlight",
+                    "facetime");
+            if (packet.order().size() > allowed.size()
+                    || !allowed.containsAll(packet.order())
+                    || new java.util.HashSet<>(packet.order()).size() != packet.order().size()) {
+                notifyPlayer(player, "Invalid home screen order.");
+                sendPhoneData(player);
+                return;
+            }
+            data.getHomeAppOrder().clear();
+            data.getHomeAppOrder().addAll(packet.order());
+        } else if ("uninstall".equals(packet.action())) {
+            if (!java.util.Set.of("map", "socials", "bank").contains(packet.appId())
+                    || !data.getInstalledApps().remove(packet.appId())) {
+                notifyPlayer(player, "This app cannot be removed.");
+                sendPhoneData(player);
+                return;
+            }
+            notifyPlayer(player, "App uninstalled. Reinstall it from the store.");
+        } else {
+            notifyPlayer(player, "Unknown home screen action.");
+            return;
+        }
+        PhoneDeviceService.saveActiveProfile(player);
         sendPhoneData(player);
     }
 
@@ -1127,8 +1268,37 @@ public final class NetworkHandler {
                     }
                     case "sounds" -> data.setNotificationSoundsEnabled(parseBoolean(packet.value()));
                     case "dnd" -> data.setDoNotDisturb(parseBoolean(packet.value()));
+                    case "appearance" -> {
+                        if (!PhoneDeviceService.isSessionUnlocked(player)
+                                || PhoneDeviceService.isAllLocked(player)) {
+                            notifyPlayer(player, "Unlock the phone before changing its appearance.");
+                            return;
+                        }
+                        if (!packet.value().equals("light") && !packet.value().equals("dark")) {
+                            throw new IllegalArgumentException("Invalid phone appearance.");
+                        }
+                        data.setAppearance(packet.value());
+                    }
+                    case "profilePhoto" -> {
+                        if (!PhoneDeviceService.isSessionUnlocked(player)
+                                || PhoneDeviceService.isAllLocked(player)) {
+                            notifyPlayer(player, "Unlock the phone before changing its profile photo.");
+                            return;
+                        }
+                        if (!packet.value().isEmpty()
+                                && !PhoneDeviceService.hasPhoto(player, packet.value())) {
+                            notifyPlayer(player, "This photo is not saved on the active phone.");
+                            return;
+                        }
+                        data.setProfilePhoto(packet.value());
+                        notifyPlayer(player, "Profile photo updated.");
+                    }
                     case "theme" -> {
                         if (!packet.value().equals("iphone") && !packet.value().equals("samsung")) {
+                            return;
+                        }
+                        if (PhoneDeviceService.activeFixedStyle(player) != null) {
+                            notifyPlayer(player, "This phone's interface style is fixed.");
                             return;
                         }
                         data.setTheme(packet.value());
@@ -1166,6 +1336,9 @@ public final class NetworkHandler {
                 return false;
             }
             if (!PhoneDeviceService.isSessionUnlocked(player)) {
+                return false;
+            }
+            if (!player.getData(ModCapabilities.PHONE_DATA).isSetupComplete()) {
                 return false;
             }
             return true;
@@ -1276,6 +1449,13 @@ public final class NetworkHandler {
             return;
         }
         PhoneData data = player.getData(ModCapabilities.PHONE_DATA);
+        PhoneStyle fixed = PhoneDeviceService.activeFixedStyle(player);
+        if (fixed != null) {
+            data.setPhoneStyle(fixed);
+            PacketDistributor.sendToPlayer(player, new PhoneStyleSyncPacket(fixed));
+            notifyPlayer(player, "This phone's interface style is fixed.");
+            return;
+        }
         data.setPhoneStyle(style);
         PacketDistributor.sendToPlayer(player, new PhoneStyleSyncPacket(data.getPhoneStyle()));
     }
@@ -1824,6 +2004,10 @@ public final class NetworkHandler {
         if (!(sender instanceof ServerPlayer player) || !hasPhoneMenu(player)) {
             return;
         }
+        if (!hasActivePlan(player)) {
+            notifyPlayer(player, "Choose an active plan to start a chat.");
+            return;
+        }
         if (!packet.recipientNumber().matches("[0-9]{1,9}")) {
             notifyPlayer(player, "Enter a valid phone number.");
             return;
@@ -1862,6 +2046,10 @@ public final class NetworkHandler {
     private static void createGroupChat(net.minecraft.world.entity.player.Player sender,
                                         CreateGroupChatPacket packet) {
         if (!(sender instanceof ServerPlayer player) || !hasPhoneMenu(player)) {
+            return;
+        }
+        if (!hasActivePlan(player)) {
+            notifyPlayer(player, "Choose an active plan to start a group chat.");
             return;
         }
         if (packet.groupName().isBlank() || packet.groupName().length() > 32
@@ -1964,11 +2152,11 @@ public final class NetworkHandler {
             return;
         }
         PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
-        if (!usage.isCycleActive()) {
-            notifyPlayer(player, "Your plan is suspended.");
+        if (!hasActivePlan(player)) {
+            notifyPlayer(player, "Choose an active plan to send messages.");
             return;
         }
-        PlanRegistry.Plan plan = PlanRegistry.getPlan(usage.getActivePlanId());
+        PlanRegistry.Plan plan = PlanRegistry.findPlan(usage.getActivePlanId());
         int maximumTexts = plan.textMessages();
         if (!plan.allowOverage() && maximumTexts >= 0 && usage.getTextsUsed() >= maximumTexts) {
             notifyPlayer(player, "Plan limit reached");
@@ -2085,11 +2273,11 @@ public final class NetworkHandler {
             return;
         }
         PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
-        if (!usage.isCycleActive()) {
-            notifyPlayer(player, "Your plan is suspended.");
+        if (!hasActivePlan(player)) {
+            notifyPlayer(player, "Choose an active plan to send messages.");
             return;
         }
-        PlanRegistry.Plan plan = PlanRegistry.getPlan(usage.getActivePlanId());
+        PlanRegistry.Plan plan = PlanRegistry.findPlan(usage.getActivePlanId());
         int maximumTexts = plan.textMessages();
         if (!plan.allowOverage() && maximumTexts >= 0 && usage.getTextsUsed() >= maximumTexts) {
             notifyPlayer(player, "Plan limit reached");
@@ -2334,7 +2522,8 @@ public final class NetworkHandler {
             syncPlanData(player);
             return;
         }
-        if (player.getData(ModCapabilities.PLAN_USAGE).getActivePlanId().equals(plan.id())) {
+        PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
+        if (usage.getActivePlanId().equals(plan.id())) {
             notifyPlayer(player, "You already have this plan.");
             return;
         }
@@ -2344,36 +2533,34 @@ public final class NetworkHandler {
         }
         boolean bypassPlanCost = net.neoforged.neoforge.server.permission.PermissionAPI.getPermission(
                 player, com.example.mobilecellnetwork.chat.ChatInterceptor.BYPASS_PLANS_PERMISSION);
-        PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
         PlanRegistry.Plan previous = usage.getActivePlanId().isBlank()
                 ? null : PlanRegistry.findPlan(usage.getActivePlanId());
-        if (!bypassPlanCost) {
-            if (player.getData(ModCapabilities.BANK_ACCOUNT).getBalance() < plan.price()) {
-                notifyPlayer(player, "Insufficient bank balance.");
-                return;
-            }
+        if (!bypassPlanCost && player.getData(ModCapabilities.BANK_ACCOUNT).getBalance() < plan.price()) {
+            notifyPlayer(player, "Insufficient bank balance.");
+            return;
         }
         com.example.mobilecellnetwork.billing.BillingManager.resetPlanRevenueCycles(player, previous, plan);
-        if (!bypassPlanCost) {
-            if (!com.example.mobilecellnetwork.billing.BillingManager.chargePlanSubscription(player, plan)) {
-                notifyPlayer(player, "Insufficient bank balance.");
-                return;
-            }
+        if (!bypassPlanCost
+                && !com.example.mobilecellnetwork.billing.BillingManager.chargePlanSubscription(player, plan)) {
+            notifyPlayer(player, "Insufficient bank balance.");
+            return;
         }
-        if (PlanRegistry.isDowngrade(
-                previous == null ? PlanRegistry.getDefaultPlan() : previous, plan)) {
+        if (PlanRegistry.isDowngrade(previous == null ? PlanRegistry.getDefaultPlan() : previous, plan)) {
             CallManager.hangUp(player.getUUID());
         }
+        long day = Math.floorDiv(player.serverLevel().getDayTime(), 24_000L);
         usage.setActivePlanId(plan.id());
-        usage.resetDailyCounters(Math.floorDiv(player.serverLevel().getDayTime(), 24_000L));
-        usage.setCycleStartDay(Math.floorDiv(player.serverLevel().getDayTime(), 24_000L));
+        usage.resetDailyCounters(day);
+        usage.setCycleStartDay(day);
         usage.setCycleActive(true);
         player.getData(ModCapabilities.PHONE_DATA).setLastKnownPlanId(plan.id());
+        player.getData(ModCapabilities.PHONE_DATA).setHomeNetworkId(plan.carrierNetworkId());
+        PhoneDeviceService.saveActiveProfile(player);
         NetworkSavedData.get(player.serverLevel().getServer().overworld())
                 .setPlanAssignment(player.getUUID(), plan.id());
         syncPlanData(player);
         sendPhoneData(player);
         notifyPlayer(player, "Plan changed to " + plan.displayName() + ".");
     }
-}
 
+}

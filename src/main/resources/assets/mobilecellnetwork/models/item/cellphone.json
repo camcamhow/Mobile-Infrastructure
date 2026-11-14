@@ -1,7 +1,7 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "particle": "mobilecellnetwork:item/mobile_phone",
-    "layer0": "mobilecellnetwork:item/mobile_phone"
+  "loader": "neoforge:separate_transforms",
+  "base": { "parent": "mobilecellnetwork:item/cellphone_body" },
+  "perspectives": {
+    "gui": { "parent": "minecraft:item/generated", "textures": { "layer0": "mobilecellnetwork:item/phone_snapple_icon" } }
   }
 }

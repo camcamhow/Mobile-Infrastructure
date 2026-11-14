@@ -18,10 +18,15 @@ public record PhoneDataSyncPacket(
         boolean doNotDisturb,
         String ringtoneSound,
         String theme,
+        String profilePhoto,
+        String appearance,
+        String deviceName,
         List<ContactEntry> contacts,
         List<String> notifications,
         List<OnlinePlayer> onlinePlayers,
         List<String> installedApps,
+        List<String> homeAppOrder,
+        List<String> purchasedApps,
         List<FollowedPlayer> followedPlayers,
         List<AppNotification> appNotifications
 ) implements CustomPacketPayload {
@@ -38,6 +43,9 @@ public record PhoneDataSyncPacket(
                 ByteBufCodecs.BOOL.encode(buffer, packet.doNotDisturb());
                 ByteBufCodecs.STRING_UTF8.encode(buffer, packet.ringtoneSound());
                 ByteBufCodecs.STRING_UTF8.encode(buffer, packet.theme());
+                buffer.writeUtf(packet.profilePhoto(), 128);
+                buffer.writeUtf(packet.appearance(), 16);
+                buffer.writeUtf(packet.deviceName(), 32);
                 buffer.writeVarInt(packet.contacts().size());
                 for (ContactEntry contact : packet.contacts()) {
                     ByteBufCodecs.STRING_UTF8.encode(buffer, contact.name());
@@ -54,6 +62,8 @@ public record PhoneDataSyncPacket(
                     ByteBufCodecs.STRING_UTF8.encode(buffer, player.number());
                 }
                 writeStrings(buffer, packet.installedApps());
+                writeStrings(buffer, packet.homeAppOrder());
+                writeStrings(buffer, packet.purchasedApps());
                 buffer.writeVarInt(packet.followedPlayers().size());
                 packet.followedPlayers().forEach(follow -> {
                     buffer.writeUUID(follow.id());
@@ -75,6 +85,9 @@ public record PhoneDataSyncPacket(
                 boolean doNotDisturb = ByteBufCodecs.BOOL.decode(buffer);
                 String ringtoneSound = ByteBufCodecs.STRING_UTF8.decode(buffer);
                 String theme = ByteBufCodecs.STRING_UTF8.decode(buffer);
+                String profilePhoto = buffer.readUtf(128);
+                String appearance = buffer.readUtf(16);
+                String deviceName = buffer.readUtf(32);
                 List<ContactEntry> contacts = new ArrayList<>();
                 int contactCount = buffer.readVarInt();
                 for (int index = 0; index < contactCount; index++) {
@@ -94,6 +107,8 @@ public record PhoneDataSyncPacket(
                             ByteBufCodecs.STRING_UTF8.decode(buffer)));
                 }
                 List<String> installedApps = readStrings(buffer);
+                List<String> homeAppOrder = readStrings(buffer);
+                List<String> purchasedApps = readStrings(buffer);
                 int followCount = Math.clamp(buffer.readVarInt(), 0, 1000);
                 List<FollowedPlayer> followedPlayers = new ArrayList<>(followCount);
                 for (int i = 0; i < followCount; i++) {
@@ -107,8 +122,9 @@ public record PhoneDataSyncPacket(
                 }
                 return new PhoneDataSyncPacket(
                         phoneNumber, planId, lowPowerMode, phoneDead, ringtoneEnabled,
-                        notificationSoundsEnabled, doNotDisturb, ringtoneSound, theme,
-                        contacts, notifications, onlinePlayers, installedApps, followedPlayers, appNotifications);
+                        notificationSoundsEnabled, doNotDisturb, ringtoneSound, theme, profilePhoto, appearance, deviceName,
+                        contacts, notifications, onlinePlayers, installedApps, homeAppOrder, purchasedApps,
+                        followedPlayers, appNotifications);
             });
 
     private static void writeStrings(net.minecraft.network.RegistryFriendlyByteBuf buffer, List<String> strings) {

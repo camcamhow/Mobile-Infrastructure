@@ -34,6 +34,8 @@ public final class NetworkSavedData extends SavedData {
     private final Map<String, PlanRecord> plans = new LinkedHashMap<>();
     private final Map<UUID, MapPointOfInterest> publicMapPoints = new LinkedHashMap<>();
     private final Map<UUID, String> planAssignments = new LinkedHashMap<>();
+    private final java.util.Set<UUID> signalTestPlayers = new java.util.LinkedHashSet<>();
+    private boolean powerTestEnabled;
     private final List<SocialPost> socialPosts = new ArrayList<>();
     private final List<EmergencyMessage> emergencyMessages = new ArrayList<>();
     private final List<EmergencyMessage> archivedEmergencyMessages = new ArrayList<>();
@@ -46,6 +48,17 @@ public final class NetworkSavedData extends SavedData {
 
     public static NetworkSavedData get(net.minecraft.server.level.ServerLevel overworld) {
         return overworld.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+    }
+
+    public boolean isPowerTestEnabled() {
+        return powerTestEnabled;
+    }
+
+    public void setPowerTestEnabled(boolean enabled) {
+        if (powerTestEnabled != enabled) {
+            powerTestEnabled = enabled;
+            setDirty();
+        }
     }
 
     public void addEmergencyMessage(EmergencyMessage message) {
@@ -163,8 +176,14 @@ public final class NetworkSavedData extends SavedData {
 
     public void unregisterAntenna(String positionKey) {
         String networkId = antennaNetworks.remove(positionKey);
-        if (networkId != null) {
-            removeTower(networkId, positionKey);
+        boolean removedFromNetwork = false;
+        for (String id : List.copyOf(networks.keySet())) {
+            if (networks.get(id).towers().contains(positionKey)) {
+                removeTower(id, positionKey);
+                removedFromNetwork = true;
+            }
+        }
+        if (networkId != null || removedFromNetwork) {
             setDirty();
         }
     }
@@ -489,6 +508,16 @@ public final class NetworkSavedData extends SavedData {
         return planAssignments.get(playerId);
     }
 
+    public boolean isSignalTestEnabled(UUID playerId) {
+        return signalTestPlayers.contains(playerId);
+    }
+
+    public void setSignalTestEnabled(UUID playerId, boolean enabled) {
+        if (enabled ? signalTestPlayers.add(playerId) : signalTestPlayers.remove(playerId)) {
+            setDirty();
+        }
+    }
+
     public void addSocialPost(SocialPost post) {
         socialPosts.add(post);
         while (socialPosts.size() > 500) {
@@ -558,6 +587,14 @@ public final class NetworkSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        tag.putBoolean("powerTestEnabled", powerTestEnabled);
+        ListTag signalTestList = new ListTag();
+        signalTestPlayers.forEach(playerId -> {
+            CompoundTag entry = new CompoundTag();
+            entry.putUUID("player", playerId);
+            signalTestList.add(entry);
+        });
+        tag.put("signalTestPlayers", signalTestList);
         ListTag numberList = new ListTag();
         issuedNumbers.forEach((playerId, number) -> {
             CompoundTag entry = new CompoundTag();
@@ -789,6 +826,13 @@ public final class NetworkSavedData extends SavedData {
 
     private static NetworkSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
         NetworkSavedData data = new NetworkSavedData();
+        data.powerTestEnabled = tag.getBoolean("powerTestEnabled");
+        for (Tag value : tag.getList("signalTestPlayers", Tag.TAG_COMPOUND)) {
+            CompoundTag entry = (CompoundTag) value;
+            if (entry.hasUUID("player")) {
+                data.signalTestPlayers.add(entry.getUUID("player"));
+            }
+        }
         for (Tag value : tag.getList("issuedNumbers", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) value;
             if (entry.hasUUID("player")) {

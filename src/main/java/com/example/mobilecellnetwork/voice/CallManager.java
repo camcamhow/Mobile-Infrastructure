@@ -52,13 +52,16 @@ public final class CallManager {
         if (ACTIVE_CALLS.containsKey(caller.getUUID())) {
             return reject(caller, CallResult.BUSY, "You are already on a call.", "CALL_FAILED");
         }
+        if (!hasActivePlan(caller)) {
+            return reject(caller, CallResult.NO_SERVICE, "Choose an active plan to call.", "CALL_FAILED");
+        }
         if (signal(caller) == SignalTier.NO_SERVICE) {
             return reject(caller, CallResult.NO_SERVICE, "You have no service.", "CALL_FAILED");
         }
         if (!hasMinutes(caller)) {
             return reject(caller, CallResult.PLAN_LIMIT_REACHED, "Plan limit reached", "PLAN_LIMIT_REACHED");
         }
-        if (phoneData(callee).isDead() || phoneData(callee).isLowPowerMode()
+        if (!hasActivePlan(callee) || phoneData(callee).isDead() || phoneData(callee).isLowPowerMode()
                 || ACTIVE_CALLS.containsKey(callee.getUUID()) || signal(callee) == SignalTier.NO_SERVICE) {
             return reject(caller, CallResult.BUSY, "The player is unavailable.", "UNAVAILABLE");
         }
@@ -221,6 +224,47 @@ public final class CallManager {
 
     public static CallSession getCall(UUID playerId) {
         return ACTIVE_CALLS.get(playerId);
+    }
+
+    public static void handleVideo(ServerPlayer sender, com.example.mobilecellnetwork.network.VideoCallPacket packet) {
+        CallSession session = getCall(sender.getUUID());
+        if (session == null || session.state() != CallSession.State.ACTIVE || !session.id().equals(packet.session())) {
+            return;
+        }
+        ServerPlayer recipient = sender.server.getPlayerList().getPlayer(session.partnerOf(sender.getUUID()));
+        if (recipient == null) return;
+        byte[] image = packet.image();
+        if (image.length == 0) {
+            session.setVideoEnabled(sender.getUUID(), packet.enabled());
+            PacketDistributor.sendToPlayer(sender,
+                    new com.example.mobilecellnetwork.network.VideoCallPacket(session.id(), packet.enabled(), true, new byte[0]));
+            if (!packet.enabled()) {
+                PacketDistributor.sendToPlayer(recipient,
+                        new com.example.mobilecellnetwork.network.VideoCallPacket(session.id(), false, false, new byte[0]));
+            }
+            return;
+        }
+        if (!packet.enabled() || !session.videoEnabled(sender.getUUID())
+                || !session.acceptVideoFrame(sender.getUUID(), System.currentTimeMillis())) return;
+        try {
+            com.example.mobilecellnetwork.network.VideoImage.validate(image);
+        } catch (java.io.IOException exception) {
+            LOGGER.warn("Rejected invalid video frame from {}", sender.getGameProfile().getName(), exception);
+            return;
+        }
+        double megabytes = image.length / 1_000_000.0D;
+        if (!com.example.mobilecellnetwork.plans.DataUsageService.spend(sender, megabytes)
+                || !com.example.mobilecellnetwork.plans.DataUsageService.spend(recipient, megabytes)) {
+            session.setVideoEnabled(sender.getUUID(), false);
+            PacketDistributor.sendToPlayer(sender,
+                    new com.example.mobilecellnetwork.network.VideoCallPacket(session.id(), false, true, new byte[0]));
+            PacketDistributor.sendToPlayer(recipient,
+                    new com.example.mobilecellnetwork.network.VideoCallPacket(session.id(), false, false, new byte[0]));
+            sender.displayClientMessage(Component.literal("Video stopped: data unavailable."), true);
+            return;
+        }
+        PacketDistributor.sendToPlayer(recipient,
+                new com.example.mobilecellnetwork.network.VideoCallPacket(session.id(), true, false, image));
     }
 
     private static void consumeMinute(CallSession session, MinecraftServer server) {
@@ -417,12 +461,18 @@ public final class CallManager {
 
     private static boolean hasMinutes(ServerPlayer player) {
         PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
-        if (!usage.isCycleActive()) {
+        if (!hasActivePlan(player)) {
             return false;
         }
-        PlanRegistry.Plan plan = PlanRegistry.getPlan(usage.getActivePlanId());
+        PlanRegistry.Plan plan = PlanRegistry.findPlan(usage.getActivePlanId());
         int maximum = plan.callMinutes();
         return plan.allowOverage() || maximum < 0 || maximum > usage.getMinutesUsed();
+    }
+
+    private static boolean hasActivePlan(ServerPlayer player) {
+        PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
+        return usage.isCycleActive() && !usage.getActivePlanId().isBlank()
+                && PlanRegistry.findPlan(usage.getActivePlanId()) != null;
     }
 
     private static int remainingMinutes(ServerPlayer player) {

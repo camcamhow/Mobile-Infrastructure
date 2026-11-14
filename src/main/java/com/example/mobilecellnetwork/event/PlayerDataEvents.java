@@ -116,12 +116,12 @@ public final class PlayerDataEvents {
 
     private static ItemStack findCellphone(ServerPlayer player) {
         for (ItemStack stack : player.getInventory().items) {
-            if (stack.is(ModItems.CELLPHONE.get())) {
+            if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) {
                 return stack;
             }
         }
         for (ItemStack stack : player.getInventory().offhand) {
-            if (stack.is(ModItems.CELLPHONE.get())) {
+            if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) {
                 return stack;
             }
         }

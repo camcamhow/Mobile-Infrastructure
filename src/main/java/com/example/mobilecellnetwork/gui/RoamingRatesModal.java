@@ -23,6 +23,7 @@ public final class RoamingRatesModal extends Screen {
     private EditBox textField;
     private EditBox mbField;
     private String error = "";
+    private int x, y, w, h;
 
     public RoamingRatesModal(Screen parent, String networkName, boolean allowRoaming,
                              long minuteRate, long textRate, long mbRate,
@@ -40,29 +41,32 @@ public final class RoamingRatesModal extends Screen {
 
     @Override
     protected void init() {
-        int x = (width - 230) / 2;
-        int y = (height - 184) / 2;
+        w = Math.min(280, width - 20);
+        h = Math.min(190, height - 20);
+        x = (width - w) / 2;
+        y = (height - h) / 2;
+        int half = (w - 30) / 2;
         allowButton = Button.builder(Component.literal("Roaming: " + (initialAllow ? "On" : "Off")),
                         button -> button.setMessage(Component.literal("Roaming: "
                                 + (button.getMessage().getString().endsWith("Off") ? "On" : "Off"))))
-                .bounds(x + 12, y + 38, 98, 18).build();
+                .bounds(x + 12, y + 38, half, 18).build();
         autoSendButton = Button.builder(Component.literal("Auto requests: " + (initialAutoSend ? "On" : "Off")),
                         button -> button.setMessage(Component.literal("Auto requests: "
                                 + (button.getMessage().getString().endsWith("Off") ? "On" : "Off"))))
-                .bounds(x + 116, y + 38, 102, 18).build();
+                .bounds(x + 18 + half, y + 38, half, 18).build();
         addRenderableWidget(allowButton);
         addRenderableWidget(autoSendButton);
-        minuteField = input(x, y + 72, "Per minute", minuteRate);
-        textField = input(x, y + 96, "Per text", textRate);
-        mbField = input(x, y + 120, "Per MB", mbRate);
+        minuteField = input(y + 69, "Per minute", minuteRate);
+        textField = input(y + 93, "Per text", textRate);
+        mbField = input(y + 117, "Per MB", mbRate);
         addRenderableWidget(Button.builder(Component.literal("Save"), button -> save())
-                .bounds(x + 116, y + 156, 48, 18).build());
+                .bounds(x + w - 116, y + h - 26, 48, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> returnToParent())
-                .bounds(x + 170, y + 156, 48, 18).build());
+                .bounds(x + w - 62, y + h - 26, 50, 18).build());
     }
 
-    private EditBox input(int x, int y, String hint, long value) {
-        EditBox field = new EditBox(font, x + 12, y, 206, 18, Component.literal(hint));
+    private EditBox input(int y, String hint, long value) {
+        EditBox field = new EditBox(font, x + 96, y, w - 108, 18, Component.literal(hint));
         field.setMaxLength(19);
         field.setValue(Long.toString(value));
         field.setHint(Component.literal(hint));
@@ -97,16 +101,18 @@ public final class RoamingRatesModal extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        int x = (width - 230) / 2;
-        int y = (height - 184) / 2;
         renderBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.fill(x, y, x + 230, y + 184, 0xFF1E2A38);
-        graphics.fill(x + 2, y + 2, x + 228, y + 182, 0xFF0F1620);
-        graphics.renderOutline(x, y, 230, 184, 0xFF3A4A5A);
-        graphics.drawString(font, "Roaming: " + font.plainSubstrByWidth(networkName, 170),
+        graphics.fill(x, y, x + w, y + h, 0xFF0F1620);
+        graphics.renderOutline(x, y, w, h, 0xFF3A4A5A);
+        graphics.fill(x, y, x + w, y + 2, PhoneColors.ACCENT_TEXT);
+        graphics.drawString(font, font.plainSubstrByWidth("Roaming: " + networkName, w - 24),
                 x + 12, y + 12, PhoneColors.PRIMARY_TEXT, true);
+        graphics.drawString(font, "Per minute", x + 12, y + 74, PhoneColors.SECONDARY_TEXT, true);
+        graphics.drawString(font, "Per text", x + 12, y + 98, PhoneColors.SECONDARY_TEXT, true);
+        graphics.drawString(font, "Per MB", x + 12, y + 122, PhoneColors.SECONDARY_TEXT, true);
         if (!error.isEmpty()) {
-            graphics.drawString(font, error, x + 12, y + 143, PhoneColors.ERROR_TEXT, true);
+            graphics.drawString(font, font.plainSubstrByWidth(error, w - 24),
+                    x + 12, y + h - 40, PhoneColors.ERROR_TEXT, true);
         }
         for (var child : children()) {
             if (child instanceof Renderable renderable) {

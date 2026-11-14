@@ -32,11 +32,11 @@ public class PhoneMenu extends AbstractContainerMenu {
     }
 
     public boolean hasCellphone(Player player) {
-        if (player.getMainHandItem().is(ModItems.CELLPHONE.get())
-                || player.getOffhandItem().is(ModItems.CELLPHONE.get())) {
+        if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(player.getMainHandItem())
+                || com.example.mobilecellnetwork.item.CellphoneItem.isPhone(player.getOffhandItem())) {
             return true;
         }
-        return player.getInventory().items.stream().anyMatch(stack -> stack.is(ModItems.CELLPHONE.get()));
+        return player.getInventory().items.stream().anyMatch(com.example.mobilecellnetwork.item.CellphoneItem::isPhone);
     }
 
     @Override

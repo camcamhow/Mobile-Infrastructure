@@ -1,5 +1,7 @@
 package com.example.mobilecellnetwork.gui.theme;
 
+import com.example.mobilecellnetwork.gui.PhoneStyle;
+import com.example.mobilecellnetwork.network.ClientPhoneCache;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,6 +18,7 @@ public final class McnIconRegistry {
     static {
         Map<String, IconEntry> icons = new HashMap<>();
         icons.put("phone", new IconEntry("phone", "\u260E", 0xFF34C759));
+        icons.put("facetime", new IconEntry("facetime", "\u25B6", 0xFF34C759));
         icons.put("sms", new IconEntry("sms", "\u2709", 0xFF34C759));
         icons.put("contacts", new IconEntry("contacts", "\u263A", 0xFF0A84FF));
         icons.put("map", new IconEntry("map", "\u25A6", 0xFF34C759));
@@ -25,6 +28,7 @@ public final class McnIconRegistry {
         icons.put("settings", new IconEntry("settings", "\u2699", 0xFF8E8E93));
         icons.put("plan", new IconEntry("plan", "\u25A4", 0xFF0A84FF));
         icons.put("voicemail", new IconEntry("voicemail", "\u25B6", 0xFFFF9F0A));
+        icons.put("ringtones", new IconEntry("ringtones", "\u266B", 0xFFFF9F0A));
         icons.put("camera", new IconEntry("camera", "\u25C9", 0xFF8E8E93));
         icons.put("gallery", new IconEntry("gallery", "\u25A3", 0xFF8E8E93));
         icons.put("flashlight", new IconEntry("flashlight", "\u2600", 0xFFFFD60A));
@@ -75,7 +79,19 @@ public final class McnIconRegistry {
             Map.entry("lock", "lock")
         );
 
+        private static final Set<String> SNAPPLE_ICONS = Set.of(
+                "phone", "sms", "contacts", "map", "store", "socials", "bank",
+                "settings", "plan", "voicemail", "camera", "gallery", "flashlight", "facetime");
+
         public static ResourceLocation getPngLocation(String appId) {
+            if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS && SNAPPLE_ICONS.contains(appId)) {
+                return ResourceLocation.fromNamespaceAndPath("mobilecellnetwork",
+                        "textures/gui/snapple_apps/" + appId + ".png");
+            }
+            if (ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI && SNAPPLE_ICONS.contains(appId)) {
+                return ResourceLocation.fromNamespaceAndPath("mobilecellnetwork",
+                        "textures/gui/g24_apps/" + appId + ".png");
+            }
             String fileName = PNG_MAP.getOrDefault(appId, appId);
             return ResourceLocation.fromNamespaceAndPath("mobilecellnetwork",
                     "textures/gui/apps/" + fileName + ".png");

@@ -50,8 +50,24 @@ public final class MobileCellCommands {
                                                 EntityArgument.getPlayer(context, "player"),
                                                 StringArgumentType.getString(context, "number")))))));
         var mcn = Commands.literal("mcn").requires(source -> source.hasPermission(2));
+        mcn.then(Commands.literal("powertest")
+                .then(Commands.argument("enabled", BoolArgumentType.bool()).executes(context -> {
+                    boolean enabled = BoolArgumentType.getBool(context, "enabled");
+                    NetworkSavedData.get(context.getSource().getServer().overworld()).setPowerTestEnabled(enabled);
+                    context.getSource().sendSuccess(() -> Component.literal(enabled
+                            ? "Infrastructure power test enabled for this world."
+                            : "Infrastructure power test disabled. Infrastructure requires FE unless requireEnergy is disabled in config."),
+                            true);
+                    return 1;
+                })));
         mcn.then(Commands.literal("signal")
                 .then(Commands.literal("here").executes(MobileCellCommands::showSignalHere)));
+        mcn.then(Commands.literal("signaltest")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(context -> setSignalTest(context,
+                                        EntityArgument.getPlayer(context, "player"),
+                                        BoolArgumentType.getBool(context, "enabled"))))));
         mcn.then(Commands.literal("chatlock")
                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                         .executes(context -> setChatLock(context, BoolArgumentType.getBool(context, "enabled")))));
@@ -1012,16 +1028,25 @@ public final class MobileCellCommands {
 
     private static ItemStack findCellphone(ServerPlayer player) {
         for (ItemStack stack : player.getInventory().items) {
-            if (stack.is(ModItems.CELLPHONE.get())) {
+            if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) {
                 return stack;
             }
         }
         for (ItemStack stack : player.getInventory().offhand) {
-            if (stack.is(ModItems.CELLPHONE.get())) {
+            if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) {
                 return stack;
             }
         }
         return ItemStack.EMPTY;
+    }
+
+    private static int setSignalTest(CommandContext<CommandSourceStack> context, ServerPlayer player, boolean enabled) {
+        NetworkSavedData.get(player.server.overworld()).setSignalTestEnabled(player.getUUID(), enabled);
+        context.getSource().sendSuccess(() -> Component.literal("Signal testing "
+                + (enabled ? "enabled for " : "disabled for ") + player.getGameProfile().getName()
+                + ". Calls, messages and data still require a plan."), true);
+        logAdmin(context, "signal test", player.getGameProfile().getName() + ": " + enabled);
+        return 1;
     }
 
     private static int showSignalHere(CommandContext<CommandSourceStack> context) {
@@ -1029,8 +1054,11 @@ public final class MobileCellCommands {
             context.getSource().sendFailure(Component.literal("This command must be run by a player."));
             return 0;
         }
-        AntennaBlockEntity antenna = CoverageEngine.getStrongestAntennaFor(player);
-        CoverageEngine.SignalResult result = CoverageEngine.updateSignal(player, antenna);
+        boolean test = NetworkSavedData.get(player.server.overworld()).isSignalTestEnabled(player.getUUID());
+        AntennaBlockEntity antenna = test ? CoverageEngine.getStrongestTestAntennaFor(player)
+                : CoverageEngine.getStrongestAntennaFor(player);
+        CoverageEngine.SignalResult result = test ? CoverageEngine.updateTestSignal(player, antenna)
+                : CoverageEngine.updateSignal(player, antenna);
         if (antenna == null) {
             context.getSource().sendSuccess(() -> Component.literal("No antenna provides signal here."), false);
             logAdmin(context, "signal here", "no service");

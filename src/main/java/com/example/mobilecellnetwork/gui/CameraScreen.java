@@ -4,24 +4,28 @@ import com.example.mobilecellnetwork.network.ClientSocialImageCache;
 import com.example.mobilecellnetwork.gui.theme.McnPrimitives;
 import com.example.mobilecellnetwork.gui.theme.McnTheme;
 import java.io.IOException;
-import java.util.LinkedHashSet;
-import java.util.Set;
-import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 public final class CameraScreen extends Screen implements PhoneNavigableScreen {
+    private static final String[] ZOOM_LABELS = {"0.5x", "1x", "2x", "5x", "10x"};
+    private static final double[] ZOOM_VALUES = {0.5D, 1.0D, 2.0D, 5.0D, 10.0D};
+    private static final int ZOOM_BUTTON_WIDTH = 30;
+    private static final int ZOOM_BUTTON_STEP = 32;
+    private static final int ZOOM_CONTROLS_WIDTH =
+            (ZOOM_LABELS.length - 1) * ZOOM_BUTTON_STEP + ZOOM_BUTTON_WIDTH;
     private final PhoneMenu menu;
-    private final Set<KeyMapping> heldMovementKeys = new LinkedHashSet<>();
     private String status = "";
     private String error = "";
-    private byte[] livePreview = new byte[0];
-    private long livePreviewNumber = -1;
-    private double previousMouseX;
-    private double previousMouseY;
-    private boolean hasPreviousMousePosition;
+    private String previewError = "";
+    private int previewGeneration;
+    private boolean draggingViewfinder;
+    private boolean captureRequested;
+    private boolean capturePending;
+    private boolean previewReady;
+    private double zoom = 1.0D;
 
     public CameraScreen(PhoneMenu menu) {
         super(Component.literal("Camera"));
@@ -40,6 +44,9 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
 
     @Override
     protected void init() {
+        if (com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+            return;
+        }
         Layout layout = layout();
         addRenderableWidget(new PhoneActionButton(layout.left(), layout.actionRowY(), layout.halfWidth(),
                 McnTheme.BUTTON_HEIGHT_SM, "Capture", button -> capture()));
@@ -75,13 +82,11 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
     }
 
     private void capture() {
-        try {
-            PhonePhotoLibrary.Photo photo = PhonePhotoLibrary.captureScreenshot();
-            ClientSocialImageCache.setPendingImage(photo.bytes());
-            status = "Captured " + photo.name();
+        if (!capturePending) {
+            capturePending = true;
+            captureRequested = true;
+            status = "Capturing...";
             error = "";
-        } catch (IOException | RuntimeException exception) {
-            error = "Capture failed: " + exception.getMessage();
         }
     }
 
@@ -104,6 +109,11 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
     @Override
         public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             PhoneFrame.render(graphics, this);
+            if (com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+                renderSnappleCamera(graphics);
+                PhoneFrame.renderStatusBar(graphics, this);
+                return;
+            }
             int left = PhoneFrame.getScreenX(this);
             int top = PhoneFrame.getContentTop(this);
             PhoneFrame.renderPanel(graphics, left, top, PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24);
@@ -115,23 +125,24 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
             int previewWidth = layout.width() - McnTheme.SPACE_S * McnTheme.SPACE_XXS;
             int previewHeight = layout.viewfinderHeight() - McnTheme.SPACE_S * McnTheme.SPACE_XXS;
             int centerX = layout.left() + layout.width() / McnTheme.SPACE_XXS;
-            updatePreview();
-            if (livePreview.length > 0) {
-                PhonePhotoLibrary.drawVersionedThumbnail(graphics, "camera-live-" + livePreviewNumber,
-                        livePreview, previewX, previewY, previewWidth, previewHeight);
-            } else {
-                McnPrimitives.fillRoundedRect(graphics, previewX, previewY, previewWidth, previewHeight,
-                        McnTheme.RADIUS_L, 0xFF16191F);
-                graphics.drawCenteredString(font, "Starting live view...", centerX,
+            McnPrimitives.fillRoundedRect(graphics, previewX, previewY, previewWidth, previewHeight,
+                    McnTheme.RADIUS_L, 0xFF16191F);
+            if (!CameraPreviewCapture.draw(this, graphics, previewX, previewY, previewWidth, previewHeight)) {
+                graphics.drawCenteredString(font, previewError.isBlank() ? "Starting live view..." : "Preview unavailable",
+                        centerX,
                         previewY + (previewHeight - font.lineHeight) / McnTheme.SPACE_XXS,
                         PhoneColors.textSecondary(style));
             }
-            graphics.drawCenteredString(font, "WASD move  |  Arrows or drag to look",
+            renderZoomControls(graphics, previewX, previewY + previewHeight - 22, previewWidth);
+
+            graphics.drawCenteredString(font, font.plainSubstrByWidth(
+                            "Move: WASD  |  Look: drag preview or arrows", layout.width()),
                     centerX, layout.infoY(), PhoneColors.textSecondary(style));
-            String message = error.isBlank() ? status : error;
+            String message = !error.isBlank() ? error : !previewError.isBlank() ? previewError : status;
             if (!message.isBlank()) {
                 graphics.drawCenteredString(font, font.plainSubstrByWidth(message, layout.width()),
-                        centerX, layout.infoY() + font.lineHeight + McnTheme.SPACE_XS, error.isBlank()
+                        centerX, layout.infoY() + font.lineHeight + McnTheme.SPACE_XS,
+                        error.isBlank() && previewError.isBlank()
                                 ? PhoneColors.textSecondary(style) : PhoneColors.error(style));
             }
             PhoneRenderer.drawPrimaryButton(graphics, style, layout.left(), layout.actionRowY(),
@@ -145,14 +156,108 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
             PhoneFrame.renderStatusBar(graphics, this);
         }
 
-    private void updatePreview() {
-        long frameNumber = CameraPreviewCapture.latestFrameNumber();
-        if (frameNumber != livePreviewNumber) {
-            byte[] current = CameraPreviewCapture.latestFrame();
-            if (current.length > 0) {
-                livePreview = current;
-                livePreviewNumber = frameNumber;
-            }
+    private void renderSnappleCamera(GuiGraphics graphics) {
+        int x = PhoneFrame.getScreenX(this);
+        int y = PhoneFrame.getScreenY(this);
+        PhoneStyle style = PhoneStyle.IOS;
+        McnPrimitives.fillRoundedRect(graphics, x, y, PhoneFrame.getScreenW(), PhoneFrame.getScreenH(),
+                14, PhoneColors.bgPrimary(style));
+        McnPrimitives.fillRoundedRect(graphics, x + 7, y + 61, 190, 185, 10, 0xFF101216);
+        if (!CameraPreviewCapture.draw(this, graphics, x + 7, y + 61, 190, 185)) {
+            SnappleText.centered(graphics, font,
+                    previewError.isBlank() ? "Starting live view..." : "Preview unavailable",
+                    x + 102, y + 148, 0xFFFFFFFF);
+        }
+        renderZoomControls(graphics, x + 7, y + 224, 190);
+        SnappleAppLayout.pill(graphics, font, x + 10, y + 31, 55, 22, "Import",
+                PhoneColors.bgSecondary(style), PhoneColors.textPrimary(style));
+        SnappleAppLayout.pill(graphics, font, x + 132, y + 31, 62, 22, "Socials",
+                PhoneColors.bgSecondary(style), PhoneColors.accent(style));
+        String message = !error.isBlank() ? error : !previewError.isBlank() ? previewError : status;
+        if (!message.isBlank()) {
+            SnappleText.centered(graphics, font, SnappleAppLayout.fit(font, message, 184), x + 102, y + 251,
+                    error.isBlank() && previewError.isBlank()
+                            ? PhoneColors.textSecondary(style) : PhoneColors.error(style));
+        } else {
+            SnappleText.centered(graphics, font, "Drag preview to look", x + 102, y + 251,
+                    PhoneColors.textSecondary(style));
+        }
+        int shutterWidth = PhoneFrame.circularElementWidth(42);
+        McnPrimitives.fillRoundedRect(graphics, x + 102 - shutterWidth / 2, y + 268,
+                shutterWidth, 42, 21, 0xFFAAAAAA);
+        int innerWidth = PhoneFrame.circularElementWidth(34);
+        McnPrimitives.fillRoundedRect(graphics, x + 102 - innerWidth / 2, y + 272,
+                innerWidth, 34, 17, 0xFFFFFFFF);
+        SnappleAppLayout.pill(graphics, font, x + 12, y + 317, 70, 27, "Gallery",
+                PhoneColors.bgSecondary(style), PhoneColors.textPrimary(style));
+        SnappleText.centered(graphics, font, "PHOTO", x + 141, y + 326, PhoneColors.accent(style));
+    }
+
+    private void renderZoomControls(GuiGraphics graphics, int x, int y, int width) {
+        int start = x + (width - ZOOM_CONTROLS_WIDTH) / 2;
+        for (int i = 0; i < ZOOM_LABELS.length; i++) {
+            int color = zoom == ZOOM_VALUES[i] ? 0xFFFFD75E : 0xFFFFFFFF;
+            McnPrimitives.fillRoundedRect(graphics, start + i * ZOOM_BUTTON_STEP, y,
+                    ZOOM_BUTTON_WIDTH, 18, 8, 0xC0202024);
+            graphics.drawCenteredString(font, ZOOM_LABELS[i],
+                    start + i * ZOOM_BUTTON_STEP + ZOOM_BUTTON_WIDTH / 2, y + 5, color);
+        }
+    }
+
+    double zoom() {
+        return zoom;
+    }
+
+    int previewGeneration() {
+        return previewGeneration;
+    }
+
+    boolean takeCaptureRequest() {
+        boolean requested = captureRequested;
+        captureRequested = false;
+        return requested;
+    }
+
+    void cameraPreviewReady() {
+        previewReady = true;
+        previewError = "";
+    }
+
+    boolean previewReady() {
+        return previewReady;
+    }
+
+    void cameraPreviewFailed(int generation, String message) {
+        if (generation == previewGeneration) {
+            capturePending = false;
+            captureRequested = false;
+            previewReady = false;
+            status = "";
+            previewError = message;
+        }
+    }
+
+    void captureFailed(int generation) {
+        if (generation == previewGeneration) {
+            capturePending = false;
+            status = "";
+            error = "Could not capture photo; try again.";
+        }
+    }
+
+    void finishCapture(int generation, byte[] bytes) {
+        if (generation != previewGeneration || minecraft.screen != this) {
+            return;
+        }
+        capturePending = false;
+        try {
+            PhonePhotoLibrary.Photo photo = PhonePhotoLibrary.saveCapturedImage(bytes);
+            ClientSocialImageCache.setPendingImage(photo.bytes());
+            status = "Captured " + photo.name();
+            error = "";
+        } catch (IOException | RuntimeException exception) {
+            status = "";
+            error = "Capture failed: " + exception.getMessage();
         }
     }
 
@@ -163,29 +268,21 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
             return;
         }
         long window = minecraft.getWindow().getWindow();
-        for (KeyMapping binding : movementBindings()) {
-            var key = binding.getKey();
-            boolean down = key.getType() == com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM
-                    && com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, key.getValue());
-            binding.setDown(down);
-            if (down) {
-                heldMovementKeys.add(binding);
-            } else {
-                heldMovementKeys.remove(binding);
-            }
+        if (!minecraft.isWindowActive()) {
+            return;
         }
         double turnX = 0.0D;
         double turnY = 0.0D;
-        if (com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT)) {
+        if (lookKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT)) {
             turnX -= 30.0D;
         }
-        if (com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT)) {
+        if (lookKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT)) {
             turnX += 30.0D;
         }
-        if (com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_UP)) {
+        if (lookKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_UP)) {
             turnY -= 20.0D;
         }
-        if (com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN)) {
+        if (lookKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN)) {
             turnY += 20.0D;
         }
         if (turnX != 0.0D || turnY != 0.0D) {
@@ -193,72 +290,39 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
         }
     }
 
+    private boolean lookKeyDown(long window, int key) {
+        var options = minecraft.options;
+        for (var binding : new net.minecraft.client.KeyMapping[] {options.keyUp, options.keyDown,
+                options.keyLeft, options.keyRight, options.keyJump, options.keyShift, options.keySprint}) {
+            if (binding.matches(key, -1)) {
+                return false;
+            }
+        }
+        return com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, key);
+    }
+
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (button == 0 && minecraft != null && minecraft.player != null
-                && !(getFocused() instanceof net.minecraft.client.gui.components.EditBox)) {
+        if (button == 0 && draggingViewfinder && minecraft != null && minecraft.player != null) {
             double sensitivity = Math.pow(minecraft.options.sensitivity().get() * 0.6D + 0.2D, 3.0D) * 8.0D;
-            minecraft.player.turn(dragX * sensitivity * 0.15D, dragY * sensitivity * 0.15D);
+            double dx = dragX * minecraft.getWindow().getScreenWidth() / width;
+            double dy = dragY * minecraft.getWindow().getScreenHeight() / height;
+            minecraft.player.turn(dx * sensitivity,
+                    dy * sensitivity * (minecraft.options.invertYMouse().get() ? -1 : 1));
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
-    public boolean keyPressed(int key, int scanCode, int modifiers) {
-        for (KeyMapping binding : movementBindings()) {
-            if (binding.matches(key, scanCode)) {
-                binding.setDown(true);
-                heldMovementKeys.add(binding);
-                return true;
-            }
-        }
-        return super.keyPressed(key, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean keyReleased(int key, int scanCode, int modifiers) {
-        for (KeyMapping binding : movementBindings()) {
-            if (binding.matches(key, scanCode) && heldMovementKeys.remove(binding)) {
-                binding.setDown(false);
-                return true;
-            }
-        }
-        return super.keyReleased(key, scanCode, modifiers);
-    }
-
-    private Set<KeyMapping> movementBindings() {
-        if (minecraft == null) {
-            return Set.of();
-        }
-        return Set.of(minecraft.options.keyUp, minecraft.options.keyDown, minecraft.options.keyLeft,
-                minecraft.options.keyRight, minecraft.options.keyJump, minecraft.options.keyShift);
-    }
-
-    @Override
-    public void mouseMoved(double mouseX, double mouseY) {
-        double layoutX = PhoneFrame.layoutMouseX(this, mouseX);
-        double layoutY = PhoneFrame.layoutMouseY(this, mouseY);
-        int left = PhoneFrame.getScreenX(this);
-        int top = PhoneFrame.getContentTop(this);
-        boolean insideViewfinder = layoutY >= top && layoutY < top + 270;
-        if (insideViewfinder && hasPreviousMousePosition && minecraft != null && minecraft.player != null) {
-            double sensitivity = Math.pow(minecraft.options.sensitivity().get() * 0.6D + 0.2D, 3.0D) * 8.0D;
-            double deltaX = (mouseX - previousMouseX) * sensitivity * 0.15D;
-            double deltaY = (mouseY - previousMouseY) * sensitivity * 0.15D;
-            minecraft.player.turn(deltaX, deltaY);
-        }
-        previousMouseX = mouseX;
-        previousMouseY = mouseY;
-        hasPreviousMousePosition = true;
-        super.mouseMoved((int) layoutX, (int) layoutY);
-    }
-
-    @Override
     public void removed() {
-        heldMovementKeys.forEach(binding -> binding.setDown(false));
-        heldMovementKeys.clear();
-        hasPreviousMousePosition = false;
+        draggingViewfinder = false;
+        previewGeneration++;
+        captureRequested = false;
+        capturePending = false;
+        previewReady = false;
+        previewError = "";
+        CameraPreviewCapture.close(this);
         super.removed();
     }
 
@@ -268,16 +332,69 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
         double y = PhoneFrame.layoutMouseY(this, mouseY);
         int left = PhoneFrame.getScreenX(this);
         int top = PhoneFrame.getContentTop(this);
+        Layout layout = layout();
+        boolean snapple = com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle() == PhoneStyle.IOS;
+        int previewX = snapple ? left + 7 : layout.left() + McnTheme.SPACE_S;
+        int previewY = snapple ? PhoneFrame.getScreenY(this) + 61 : layout.top() + McnTheme.SPACE_S;
+        int previewWidth = snapple ? 190 : layout.width() - McnTheme.SPACE_S * McnTheme.SPACE_XXS;
+        int previewHeight = snapple ? 185 : layout.viewfinderHeight() - McnTheme.SPACE_S * McnTheme.SPACE_XXS;
+        int zoomStart = previewX + (previewWidth - ZOOM_CONTROLS_WIDTH) / 2;
+        int zoomY = previewY + previewHeight - 22;
+        if (button == 0 && y >= zoomY && y < zoomY + 18) {
+            for (int i = 0; i < ZOOM_VALUES.length; i++) {
+                if (x >= zoomStart + i * ZOOM_BUTTON_STEP
+                        && x < zoomStart + i * ZOOM_BUTTON_STEP + ZOOM_BUTTON_WIDTH) {
+                    zoom = ZOOM_VALUES[i];
+                    return true;
+                }
+            }
+        }
+        if (button == 0 && x >= previewX && x < previewX + previewWidth
+                && y >= previewY && y < previewY + previewHeight) {
+            draggingViewfinder = true;
+            return true;
+        }
+        if (snapple) {
+            int sy = PhoneFrame.getScreenY(this);
+            if (button == 0) {
+                if (x >= left + 10 && x < left + 65 && y >= sy + 31 && y < sy + 53) {
+                    importPhoto();
+                    return true;
+                }
+                if (x >= left + 132 && x < left + 194 && y >= sy + 31 && y < sy + 53) {
+                    usePhoto();
+                    return true;
+                }
+                int shutterWidth = PhoneFrame.circularElementWidth(42);
+                if (x >= left + 102 - shutterWidth / 2 && x < left + 102 + shutterWidth / 2
+                        && y >= sy + 268 && y < sy + 310) {
+                    capture();
+                    return true;
+                }
+                if (x >= left + 12 && x < left + 82 && y >= sy + 317 && y < sy + 344) {
+                    minecraft.setScreen(new GalleryScreen(menu, this, photo -> {
+                        ClientSocialImageCache.setPendingImage(photo.bytes());
+                        status = "Selected " + photo.name();
+                        error = "";
+                    }));
+                    return true;
+                }
+            }
+            return false;
+        }
         if (button == 0) {
-            if (x >= left + 16 && x < left + 98 && y >= top + 276 && y < top + 298) {
+            if (x >= layout.left() && x < layout.left() + layout.halfWidth()
+                    && y >= layout.actionRowY() && y < layout.actionRowY() + McnTheme.BUTTON_HEIGHT_SM) {
                 capture();
                 return true;
             }
-            if (x >= left + 106 && x < left + 188 && y >= top + 276 && y < top + 298) {
+            if (x >= layout.right() - layout.halfWidth() && x < layout.right()
+                    && y >= layout.actionRowY() && y < layout.actionRowY() + McnTheme.BUTTON_HEIGHT_SM) {
                 importPhoto();
                 return true;
             }
-            if (x >= left + 16 && x < left + 188 && y >= top + 304 && y < top + 326) {
+            if (x >= layout.left() && x < layout.right()
+                    && y >= layout.useRowY() && y < layout.useRowY() + McnTheme.BUTTON_HEIGHT_SM) {
                 usePhoto();
                 return true;
             }
@@ -287,6 +404,10 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && draggingViewfinder) {
+            draggingViewfinder = false;
+            return true;
+        }
         return super.mouseReleased(PhoneFrame.layoutMouseX(this, mouseX),
                 PhoneFrame.layoutMouseY(this, mouseY), button);
     }

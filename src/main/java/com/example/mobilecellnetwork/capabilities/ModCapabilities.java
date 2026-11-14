@@ -40,8 +40,14 @@ public final class ModCapabilities {
                 (antenna, side) -> (AntennaBlockEntity) antenna);
         event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, ModBlockEntities.DIAMOND_ANTENNA.get(),
                 (antenna, side) -> (AntennaBlockEntity) antenna);
+        event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, ModBlockEntities.TEST_ANTENNA.get(),
+                (antenna, side) -> antenna);
+        event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, ModBlockEntities.SERVER.get(),
+                (server, side) -> server);
         event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, ModBlockEntities.PHONE_CHARGER.get(),
                 (charger, side) -> charger);
+        event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, ModBlockEntities.SIGNAL_BOOSTER.get(),
+                (booster, side) -> booster);
         event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, ModBlockEntities.PHONE_CHARGER.get(),
                 (charger, side) -> charger.getItemHandler());
     }

@@ -15,6 +15,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -167,6 +169,36 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
     public Set<BlockPos> getMeshLinks() { return Set.copyOf(meshLinks); }
     public AntennaPowerState getPowerState() { return powerState; }
     public boolean isPowered() { return powerState != AntennaPowerState.UNPOWERED; }
+    @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("powerState", powerState.name());
+        tag.putString("networkId", networkId);
+        tag.putBoolean("enabled", enabled);
+        return tag;
+    }
+    @Override public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        try {
+            powerState = AntennaPowerState.valueOf(tag.getString("powerState"));
+        } catch (IllegalArgumentException exception) {
+            com.mojang.logging.LogUtils.getLogger().warn("Invalid antenna power state in update", exception);
+            powerState = AntennaPowerState.UNPOWERED;
+        }
+        networkId = tag.getString("networkId");
+        enabled = tag.getBoolean("enabled");
+    }
+    @Override public void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet,
+                                        HolderLookup.Provider registries) {
+        handleUpdateTag(packet.getTag(), registries);
+    }
+    @Override public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    private void syncPowerDisplay() {
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
     public Set<UUID> getUserSet() { return Set.copyOf(userSet); }
     public int getAntennaDrawPerSecond() { return tier.drawPerSecond(); }
     public boolean isChunkLoadedByAntenna() { return chunkForcedByAntenna; }
@@ -278,7 +310,7 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
         AntennaPowerState newState;
         if (!enabled) {
             newState = AntennaPowerState.UNPOWERED;
-        } else if (!MobileCellNetworkConfig.REQUIRE_ENERGY.get()) {
+        } else if (!requiresEnergy()) {
             newState = AntennaPowerState.FE_DISABLED;
         } else {
             int draw = tier.drawPerSecond();
@@ -295,6 +327,7 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
         if (newState != powerState) {
             powerState = newState;
             setChanged();
+            syncPowerDisplay();
         }
         if (energy != previousEnergy) {
             setChanged();
@@ -308,7 +341,7 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
         AntennaPowerState refreshedState;
         if (!enabled) {
             refreshedState = AntennaPowerState.UNPOWERED;
-        } else if (!MobileCellNetworkConfig.REQUIRE_ENERGY.get()) {
+        } else if (!requiresEnergy()) {
             refreshedState = AntennaPowerState.FE_DISABLED;
         } else if (energy >= tier.drawPerSecond()) {
             refreshedState = AntennaPowerState.ACTIVE;
@@ -317,10 +350,16 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
         } else {
             refreshedState = AntennaPowerState.UNPOWERED;
         }
+
         if (powerState != refreshedState) {
             powerState = refreshedState;
             setChanged();
+            syncPowerDisplay();
         }
+    }
+
+    protected boolean requiresEnergy() {
+        return !InfrastructurePower.bypassed(level);
     }
 
     public void updateChunkTicket(ServerLevel level) {

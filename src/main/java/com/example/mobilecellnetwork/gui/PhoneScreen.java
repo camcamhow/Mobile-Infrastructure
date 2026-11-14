@@ -8,6 +8,7 @@ import com.example.mobilecellnetwork.network.MapInteractionPacket;
 import com.example.mobilecellnetwork.network.MapOpenPacket;
 import com.example.mobilecellnetwork.network.RequestPhoneDataPacket;
 import com.example.mobilecellnetwork.network.PhoneDeviceClientCache;
+import com.example.mobilecellnetwork.network.HomeAppActionPacket;
 import com.example.mobilecellnetwork.network.RequestPhonePhotosPacket;
 import com.example.mobilecellnetwork.network.SetLowPowerPacket;
 import com.example.mobilecellnetwork.network.StartChatPacket;
@@ -23,7 +24,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.network.PacketDistributor;
-import com.example.mobilecellnetwork.gui.NoServiceOverlay;
 
 public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implements PhoneNavigableScreen {
     private static final String[] APPS = {
@@ -44,6 +44,17 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
     private final java.util.List<Button> homeAppButtons = new java.util.ArrayList<>();
     private net.minecraft.client.gui.components.EditBox searchBox;
     private String appQuery = "";
+    private boolean pullingControlCenter;
+    private double controlCenterStartY;
+    private boolean editingHome;
+    private String pressedApp = "";
+    private String pendingRemoval = "";
+    private long appPressedAt;
+    private double pressX, pressY, dragX, dragY;
+    private boolean movedApp;
+    private java.util.List<String> lastHomeOrder = java.util.List.of();
+    private final java.util.Map<String, float[]> homeIconPositions = new java.util.HashMap<>();
+    private long lastIconFrame;
     // Track installed apps to detect changes and refresh home screen
     private java.util.Set<String> lastKnownInstalledApps = java.util.Set.of();
 
@@ -64,6 +75,11 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
 
     @Override
     public void navigateBack() {
+        if (editingHome) {
+            editingHome = false;
+            pendingRemoval = "";
+            return;
+        }
         if (currentApp != PhoneApp.HOME) {
             showHome();
         }
@@ -121,24 +137,14 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (ClientPhoneCache.planId().isBlank()) {
-            PhoneFrame.render(graphics, this);
-            int x = PhoneFrame.getScreenX(this);
-            int y = PhoneFrame.getContentTop(this);
-            int screenW = PhoneFrame.getScreenW();
-            int screenH = PhoneFrame.getScreenH() - 24;
-            PhoneStyle style = ClientPhoneCache.phoneStyle();
-            NoServiceOverlay.render(graphics, style, x, y, screenW, screenH, "Phone", font);
-            int buttonX = x + (screenW - 120) / 2;
-            int planButtonY = y + screenH - 54;
-            PhoneRenderer.drawPrimaryButton(graphics, style, buttonX, planButtonY, 120, 20,
-                    "Choose a plan", font);
-            PhoneRenderer.drawSecondaryButton(graphics, style, buttonX, planButtonY + 25, 120, 20,
-                    "Emergency SMS", font);
-            PhoneFrame.renderStatusBar(graphics, this);
-            return;
+    protected void setInitialFocus() {
+        if (!HeldPhoneView.active()) {
+            super.setInitialFocus();
         }
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         boolean noService = ClientSignalCache.tier() == SignalTier.NO_SERVICE;
         boolean dead = ClientPhoneCache.phoneDead();
         boolean lowPower = ClientPhoneCache.lowPowerMode();
@@ -159,6 +165,10 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
                         lastKnownInstalledApps = java.util.Set.copyOf(currentInstalledApps);
                         layoutHomeApps();
                     }
+                    if (!ClientPhoneCache.homeAppOrder().equals(lastHomeOrder)) {
+                        lastHomeOrder = ClientPhoneCache.homeAppOrder();
+                        layoutHomeApps();
+                    }
                 }
                 if (homeScreen) {
             beginHomePhoneFrame(graphics);
@@ -170,10 +180,27 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         }
         if (homeScreen) {
             renderHomeHeader(graphics);
-            McnPrimitives.drawCard(graphics, ClientPhoneCache.phoneStyle(),
-                    leftPos + McnTheme.SPACE_M, homeSearchY(),
-                    imageWidth - McnTheme.SPACE_M * McnTheme.SPACE_XXS,
-                    McnTheme.TEXT_FIELD_HEIGHT);
+            if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+                McnPrimitives.fillRoundedRect(graphics, homeSearchX(), homeSearchY(),
+                        homeSearchWidth(), McnTheme.TEXT_FIELD_HEIGHT, 12, 0x78404558);
+                if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
+                    SnappleText.centered(graphics, font, "Search",
+                            homeSearchX() + homeSearchWidth() / 2,
+                            homeSearchY() + (McnTheme.TEXT_FIELD_HEIGHT - font.lineHeight) / 2, 0xFFD8D8E0);
+                }
+                if (appQuery.isBlank()) {
+                    McnPrimitives.fillRoundedRect(graphics, leftPos + 9, topPos + 300,
+                            imageWidth - 18, 53, 17, 0x704D5068);
+                }
+            } else if (ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI) {
+                McnPrimitives.fillRoundedRect(graphics, homeSearchX(), homeSearchY(),
+                        homeSearchWidth(), McnTheme.TEXT_FIELD_HEIGHT, 12, 0xB02C3746);
+            } else {
+                McnPrimitives.fillRoundedRect(graphics,
+                        leftPos + McnTheme.SPACE_M, homeSearchY(),
+                        imageWidth - McnTheme.SPACE_M * McnTheme.SPACE_XXS,
+                        McnTheme.TEXT_FIELD_HEIGHT, 12, 0xA020293A);
+            }
             if (homeShortcuts.isEmpty() && !ClientPhoneCache.phoneDead()) {
                 graphics.drawCenteredString(font, "No apps found", leftPos + imageWidth / 2,
                         homeGridY(), PhoneColors.textSecondary(ClientPhoneCache.phoneStyle()));
@@ -200,24 +227,64 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         double layoutX = PhoneFrame.layoutMouseX(this, mouseX);
         double layoutY = PhoneFrame.layoutMouseY(this, mouseY);
-        if (ClientPhoneCache.planId().isBlank()) {
-            if (button == 0) {
-                int x = PhoneFrame.getScreenX(this);
-                int y = PhoneFrame.getContentTop(this);
-                int screenW = PhoneFrame.getScreenW();
-                int planButtonY = y + PhoneFrame.getScreenH() - 24 - 54;
-                int buttonX = x + (screenW - 120) / 2;
-                if (layoutX >= buttonX && layoutX < buttonX + 120
-                        && layoutY >= planButtonY && layoutY < planButtonY + 20) {
-                    Minecraft.getInstance().setScreen(new PlanScreen(menu));
-                    return true;
-                }
-                if (layoutX >= buttonX && layoutX < buttonX + 120
-                        && layoutY >= planButtonY + 25 && layoutY < planButtonY + 45) {
-                    Minecraft.getInstance().setScreen(SmsScreen.emergency(menu));
+        if (button == 1 && currentApp == PhoneApp.HOME && !ClientPhoneCache.phoneDead()
+                && !ClientPhoneCache.lowPowerMode() && appQuery.isBlank()) {
+            for (AppShortcut shortcut : homeShortcuts) {
+                if (layoutX >= leftPos + shortcut.x() && layoutX < leftPos + shortcut.x() + McnTheme.ICON_TILE_GRID
+                        && layoutY >= topPos + shortcut.y() && layoutY < topPos + shortcut.y() + McnTheme.ICON_TILE_GRID) {
+                    editingHome = true;
+                    pendingRemoval = "";
+                    if (searchBox != null) searchBox.setFocused(false);
                     return true;
                 }
             }
+        }
+        if (button == 0 && currentApp == PhoneApp.HOME && !ClientPhoneCache.phoneDead()) {
+            if (editingHome && layoutX >= leftPos + 145 && layoutX < leftPos + 198
+                    && layoutY >= topPos + 31 && layoutY < topPos + 52) {
+                editingHome = false;
+                pendingRemoval = "";
+                return true;
+            }
+            for (AppShortcut shortcut : homeShortcuts) {
+                int x = leftPos + shortcut.x();
+                int y = topPos + shortcut.y();
+                if (editingHome && removableApp(shortcut.id()) && layoutX >= x - 5 && layoutX < x + 12
+                        && layoutY >= y - 5 && layoutY < y + 12) {
+                    if (pendingRemoval.equals(shortcut.id())) {
+                        PacketDistributor.sendToServer(new HomeAppActionPacket("uninstall", shortcut.id(), java.util.List.of()));
+                        pendingRemoval = "";
+                    } else {
+                        pendingRemoval = shortcut.id();
+                    }
+                    return true;
+                }
+                if (layoutX >= x && layoutX < x + McnTheme.ICON_TILE_GRID
+                        && layoutY >= y && layoutY < y + McnTheme.ICON_TILE_GRID) {
+                    pendingRemoval = "";
+                    pressedApp = shortcut.id();
+                    appPressedAt = net.minecraft.Util.getMillis();
+                    pressX = dragX = layoutX;
+                    pressY = dragY = layoutY;
+                    movedApp = false;
+                    return true;
+                }
+            }
+            if (editingHome) {
+                pendingRemoval = "";
+                return true;
+            }
+        }
+        pullingControlCenter = button == 0 && currentApp == PhoneApp.HOME
+                && (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                    || ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI)
+                && !ClientPhoneCache.phoneDead()
+                && layoutX >= PhoneFrame.getScreenX(this) + PhoneFrame.getScreenW() - 65
+                && layoutX < PhoneFrame.getScreenX(this) + PhoneFrame.getScreenW()
+                && layoutY >= PhoneFrame.getScreenY(this)
+                && layoutY < PhoneFrame.getScreenY(this) + 30;
+        if (pullingControlCenter) {
+            controlCenterStartY = layoutY;
             return true;
         }
         if (currentApp == PhoneApp.PHONE && button == 0) {
@@ -254,12 +321,71 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && !pressedApp.isEmpty()) {
+            activateHomeEditingIfHeld();
+            String id = pressedApp;
+            pressedApp = "";
+            if (editingHome) {
+                double x = PhoneFrame.layoutMouseX(this, mouseX);
+                double y = PhoneFrame.layoutMouseY(this, mouseY);
+                AppShortcut source = homeShortcuts.stream().filter(app -> app.id().equals(id)).findFirst().orElse(null);
+                if (source != null && movedApp) {
+                    double centerX = leftPos + source.x() + McnTheme.ICON_TILE_GRID / 2.0D + x - pressX;
+                    double centerY = topPos + source.y() + McnTheme.ICON_TILE_GRID / 2.0D + y - pressY;
+                    AppShortcut target = homeShortcuts.stream().min(java.util.Comparator.comparingDouble(app ->
+                            Math.hypot(centerX - (leftPos + app.x() + McnTheme.ICON_TILE_GRID / 2.0D),
+                                    centerY - (topPos + app.y() + McnTheme.ICON_TILE_GRID / 2.0D)))).orElse(source);
+                    double distance = Math.hypot(centerX - (leftPos + target.x() + McnTheme.ICON_TILE_GRID / 2.0D),
+                            centerY - (topPos + target.y() + McnTheme.ICON_TILE_GRID / 2.0D));
+                    if (!target.id().equals(id) && distance <= McnTheme.ICON_TILE_GRID) {
+                        java.util.List<String> order = new java.util.ArrayList<>(orderedAppIds());
+                        java.util.Collections.swap(order, order.indexOf(id), order.indexOf(target.id()));
+                        for (String saved : ClientPhoneCache.homeAppOrder()) {
+                            if (!order.contains(saved)) order.add(saved);
+                        }
+                        homeIconPositions.put(id, new float[] {
+                                (float) (leftPos + source.x() + x - pressX),
+                                (float) (topPos + source.y() + y - pressY)
+                        });
+                        ClientPhoneCache.setHomeAppOrder(order);
+                        lastHomeOrder = java.util.List.copyOf(order);
+                        PacketDistributor.sendToServer(new HomeAppActionPacket("order", "", order));
+                        layoutHomeApps();
+                    }
+                }
+            } else if (!movedApp) {
+                for (PhoneApp app : PhoneApp.values()) {
+                    if (app.id.equals(id)) {
+                        openApp(app);
+                        break;
+                    }
+                }
+            }
+            return true;
+        }
+        if (pullingControlCenter) {
+            pullingControlCenter = false;
+            if (button == 0 && PhoneFrame.layoutMouseY(this, mouseY) >= controlCenterStartY + 24) {
+                Minecraft.getInstance().setScreen(new ControlCenterScreen(menu));
+            }
+            return true;
+        }
         return super.mouseReleased(PhoneFrame.layoutMouseX(this, mouseX),
                 PhoneFrame.layoutMouseY(this, mouseY), button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (button == 0 && !pressedApp.isEmpty()) {
+            activateHomeEditingIfHeld();
+            this.dragX = PhoneFrame.layoutMouseX(this, mouseX);
+            this.dragY = PhoneFrame.layoutMouseY(this, mouseY);
+            if (Math.hypot(this.dragX - pressX, this.dragY - pressY) > 5.0D) movedApp = true;
+            return true;
+        }
+        if (pullingControlCenter && button == 0) {
+            return true;
+        }
         return super.mouseDragged(PhoneFrame.layoutMouseX(this, mouseX),
                 PhoneFrame.layoutMouseY(this, mouseY), button,
                 PhoneFrame.layoutMouseDeltaX(this, dragX), PhoneFrame.layoutMouseDeltaY(this, dragY));
@@ -278,6 +404,12 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
 
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
+        if (!pressedApp.isEmpty()) {
+            activateHomeEditingIfHeld();
+            dragX = PhoneFrame.layoutMouseX(this, mouseX);
+            dragY = PhoneFrame.layoutMouseY(this, mouseY);
+            if (Math.hypot(dragX - pressX, dragY - pressY) > 5.0D) movedApp = true;
+        }
         super.mouseMoved(PhoneFrame.layoutMouseX(this, mouseX), PhoneFrame.layoutMouseY(this, mouseY));
     }
 
@@ -369,19 +501,23 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         if (ClientPhoneCache.phoneDead()) {
             return;
         }
-        int searchX = leftPos + McnTheme.SPACE_M;
+        int searchX = homeSearchX();
         int searchY = homeSearchY();
-        int searchWidth = imageWidth - McnTheme.SPACE_M * McnTheme.SPACE_XXS;
+        int searchWidth = homeSearchWidth();
+        PhoneStyle style = ClientPhoneCache.phoneStyle();
+        int textY = style == PhoneStyle.IOS || style == PhoneStyle.SAMSUNG_ONE_UI
+                ? searchY + (McnTheme.TEXT_FIELD_HEIGHT - font.lineHeight) / 2 : searchY;
         searchBox = new net.minecraft.client.gui.components.EditBox(font,
-                searchX + McnTheme.SPACE_S, searchY,
+                searchX + McnTheme.SPACE_S, textY,
                 searchWidth - McnTheme.SPACE_S * McnTheme.SPACE_XXS,
                 McnTheme.TEXT_FIELD_HEIGHT, Component.literal("Search apps"));
         searchBox.setBordered(false);
         searchBox.setMaxLength(24);
-        searchBox.setHint(Component.literal("Search apps"));
-        PhoneStyle style = ClientPhoneCache.phoneStyle();
-        searchBox.setTextColor(PhoneColors.textPrimary(style));
-        searchBox.setTextColorUneditable(PhoneColors.textSecondary(style));
+        searchBox.setHint(style == PhoneStyle.IOS
+                ? Component.empty() : Component.literal("Search apps"));
+        searchBox.setTextShadow(false);
+        searchBox.setTextColor(0xFFFFFFFF);
+        searchBox.setTextColorUneditable(0xFFD8D8E0);
         searchBox.setValue(appQuery);
         searchBox.setResponder(value -> {
             appQuery = value;
@@ -404,28 +540,71 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         int gridX = (imageWidth - gridWidth) / McnTheme.SPACE_XXS;
         int gridY = homeGridY() - topPos;
         int cellHeight = tileSize + McnTheme.SPACE_XXS + McnTheme.TEXT_CAPTION;
-        for (int index = 0; index < APPS.length; index++) {
-            final PhoneApp app = PhoneApp.values()[index + 1];
-            if (!isAllowedInLowPower(app)
-                    || (app != PhoneApp.VOICEMAIL && !ClientPhoneCache.canUseApp(app.id))) {
+        boolean hasDock = ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                || ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI;
+        int dockIndex = 0;
+        int gridIndex = 0;
+        java.util.List<String> ordered = orderedAppIds();
+        int dockStart = Math.max(0, ordered.size() - 4);
+        for (String id : ordered) {
+            PhoneApp app = java.util.Arrays.stream(PhoneApp.values())
+                    .filter(value -> value != PhoneApp.HOME && value.id.equals(id)).findFirst().orElseThrow();
+            if (!isAllowedInLowPower(app) || !isAppAvailable(app)) {
                 continue;
             }
             if (!query.isEmpty() && !app.label.toLowerCase(java.util.Locale.ROOT).contains(query)) {
                 continue;
             }
-            int column = shown % columns;
-            int row = shown / columns;
+            boolean dock = hasDock && query.isEmpty() && ordered.indexOf(id) >= dockStart;
+            int position = hasDock && query.isEmpty() ? (dock ? dockIndex++ : gridIndex++) : shown;
+            int column = position % columns;
+            int row = position / columns;
             shown++;
             int x = gridX + column * (tileSize + gap);
-            int y = gridY + row * cellHeight;
+            int y = dock ? 305 : gridY + row * cellHeight;
             homeShortcuts.add(new AppShortcut(app.id, app.label, x, y,
                     McnIconRegistry.getBrandColor(app.id)));
             InvisibleAppButton appButton = new InvisibleAppButton(leftPos + x, topPos + y,
-                    tileSize, cellHeight,
+                    tileSize, dock ? tileSize : cellHeight,
                     button -> openApp(app));
             homeAppButtons.add(appButton);
             addRenderableWidget(appButton);
         }
+    }
+
+    private java.util.List<String> orderedAppIds() {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (PhoneApp app : PhoneApp.values()) {
+            if (app != PhoneApp.HOME && isAllowedInLowPower(app) && isAppAvailable(app)) ids.add(app.id);
+        }
+        java.util.List<String> order = ClientPhoneCache.homeAppOrder();
+        if (order.isEmpty() && (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                || ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI)) {
+            ids.sort(java.util.Comparator.comparing(id -> java.util.Arrays.stream(PhoneApp.values())
+                    .anyMatch(app -> app.id.equals(id) && isSnappleDockApp(app))));
+        } else {
+            ids.sort(java.util.Comparator.comparingInt(id -> {
+                int position = order.indexOf(id);
+                return position < 0 ? Integer.MAX_VALUE : position;
+            }));
+        }
+        return ids;
+    }
+
+    private static boolean removableApp(String id) {
+        return "map".equals(id) || "socials".equals(id) || "bank".equals(id);
+    }
+
+    private static boolean isAppAvailable(PhoneApp app) {
+        if (app == PhoneApp.FACETIME) {
+            return ClientPhoneCache.phoneStyle() == PhoneStyle.IOS;
+        }
+        return app == PhoneApp.VOICEMAIL || ClientPhoneCache.canUseApp(app.id);
+    }
+
+    private static boolean isSnappleDockApp(PhoneApp app) {
+        return app == PhoneApp.PHONE || app == PhoneApp.SMS
+                || app == PhoneApp.MAP || app == PhoneApp.CAMERA;
     }
 
     private int homeGreetingY() {
@@ -438,64 +617,233 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
     }
 
     private int homeSearchY() {
+        if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                || ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI) {
+            return topPos + 263;
+        }
+
         return homeSubtitleY() + McnTheme.TEXT_CAPTION + McnTheme.SPACE_S;
     }
 
+    private int homeSearchWidth() {
+        return ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                ? 94 : imageWidth - McnTheme.SPACE_M * McnTheme.SPACE_XXS;
+    }
+
+    private int homeSearchX() {
+        return leftPos + (imageWidth - homeSearchWidth()) / 2;
+    }
+
     private int homeGridY() {
+        if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                || ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI) {
+            return topPos + (appQuery.isBlank() ? 90 : 38);
+        }
         return homeSearchY() + McnTheme.TEXT_FIELD_HEIGHT + McnTheme.SPACE_XS + McnTheme.SPACE_S;
     }
 
     private void beginHomePhoneFrame(GuiGraphics graphics) {
         PhoneColors.applyTheme();
-        double scale = Math.clamp(Math.min((width - McnTheme.SPACE_L) / (double) McnTheme.PHONE_WIDTH,
-                (height - McnTheme.SPACE_L) / (double) McnTheme.PHONE_HEIGHT), 0.1D, 1.0D);
-        double centerX = width / 2.0D;
-        double centerY = height / 2.0D;
-        graphics.pose().pushPose();
-        graphics.pose().translate(centerX, centerY, 0.0D);
-        graphics.pose().scale((float) scale, (float) scale, 1.0F);
-        graphics.pose().translate(-centerX, -centerY, 0.0D);
+        PhoneFrame.pushPhoneTransform(graphics, this);
         McnPrimitives.drawPhoneFrame(graphics, ClientPhoneCache.phoneStyle(), width, height);
+        if (!ClientPhoneCache.phoneDead()) {
+            McnPrimitives.drawPhoneWallpaper(graphics, ClientPhoneCache.phoneStyle(),
+                    PhoneFrame.getScreenX(this), PhoneFrame.getScreenY(this),
+                    PhoneFrame.getScreenW(), PhoneFrame.getScreenH());
+            if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+                renderWallpaperAnimation(graphics);
+            } else if (ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI) {
+                renderAndroidWallpaperAnimation(graphics);
+            }
+        }
+    }
+
+    private void renderAndroidWallpaperAnimation(GuiGraphics graphics) {
+        int x = PhoneFrame.getScreenX(this);
+        int y = PhoneFrame.getScreenY(this);
+        int width = PhoneFrame.getScreenW();
+        int height = PhoneFrame.getScreenH();
+        double time = net.minecraft.Util.getMillis() / 1000.0D;
+        int cx = x + width / 2 + (int) (Math.sin(time * 0.18D) * 20);
+        int cy = y + height / 2 + (int) (Math.cos(time * 0.14D) * 35);
+        for (int radius = 60; radius >= 20; radius -= 10) {
+            McnPrimitives.fillRoundedRect(graphics, cx - radius, cy - radius, radius * 2, radius * 2,
+                    radius, 0x0619C4DD);
+        }
+        for (int i = 0; i < 10; i++) {
+            int px = x + 24 + i * (width - 48) / 10;
+            double travel = i * 41 - time * (2 + i % 3);
+            double offset = travel - Math.floor(travel / (height - 64)) * (height - 64);
+            int py = y + 32 + (int) offset;
+            graphics.fill(px, py, px + 2, py + 2, 0x50C8F6FF);
+        }
+    }
+
+    private void renderWallpaperAnimation(GuiGraphics graphics) {
+            int x = PhoneFrame.getScreenX(this), y = PhoneFrame.getScreenY(this);
+            int w = PhoneFrame.getScreenW(), h = PhoneFrame.getScreenH();
+            double time = net.minecraft.Util.getMillis() / 1000.0D;
+            int cx = x + w / 2;
+            int cy = y + h / 2;
+            graphics.pose().pushPose();
+            graphics.pose().translate(Math.sin(time * 0.22D) * 32, Math.cos(time * 0.17D) * 45, 0);
+            for (int radius = 65; radius >= 15; radius -= 10) {
+                McnPrimitives.fillRoundedRect(graphics, cx - radius, cy - radius, radius * 2, radius * 2,
+                        radius, 0x080D70D8);
+            }
+            graphics.pose().popPose();
+            for (int i = 0; i < 12; i++) {
+                int px = x + 16 + (i * 43 % (w - 32));
+                double travel = i * 53 - time * (3 + i % 3);
+                double offset = travel - Math.floor(travel / (h - 48)) * (h - 48);
+                graphics.pose().pushPose();
+                graphics.pose().translate(0, offset, 0);
+                graphics.fill(px, y + 24, px + 2, y + 26, 0x80DAEFFF);
+                graphics.pose().popPose();
+            }
     }
 
     private void renderHomeHeader(GuiGraphics graphics) {
             PhoneStyle style = ClientPhoneCache.phoneStyle();
+            if (style == PhoneStyle.IOS) {
+                if (!appQuery.isBlank()) {
+                    return;
+                }
+                int x = leftPos + 14;
+                int y = topPos + 29;
+                java.time.LocalTime time = java.time.LocalTime.now();
+                drawHomeText(graphics, time.format(java.time.format.DateTimeFormatter.ofPattern("HH")),
+                        x, y, 25, 0xFFFFFFFF, true);
+                drawHomeText(graphics, time.format(java.time.format.DateTimeFormatter.ofPattern("mm")),
+                        x, y + 24, 25, 0xFFFFFFFF, true);
+                McnPrimitives.fillRoundedRect(graphics, x + 91, y + 4, 79, 45, 13, 0x70312A47);
+                SnappleText.draw(graphics, font, java.time.LocalDate.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d")),
+                        x + 98, y + 11, 0xFFFFFFFF);
+                String network = ClientSignalCache.tier() == SignalTier.NO_SERVICE
+                        ? "No Service" : ClientSignalCache.networkName();
+                SnappleText.draw(graphics, font, font.plainSubstrByWidth(network, 65),
+                        x + 98, y + 28, 0xFFE7E6F2);
+                return;
+            }
+            if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+                if (!appQuery.isBlank() || editingHome) return;
+                drawHomeCenteredText(graphics, java.time.LocalTime.now()
+                                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                        leftPos + imageWidth / 2, topPos + 31, 24, 0xFFFFFFFF);
+                drawHomeCenteredText(graphics, java.time.LocalDate.now()
+                                .format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d")),
+                        leftPos + imageWidth / 2, topPos + 59, 10, 0xFFE7F0F7);
+                return;
+            }
             int contentLeft = McnPrimitives.getContentLeft(McnPrimitives.getScreenX(width));
-            drawHomeText(graphics, "Good " + timeGreeting(), contentLeft, homeGreetingY(),
-                    McnTheme.TEXT_HEADER, PhoneColors.textPrimary(style), true);
-            drawHomeText(graphics, "Your mobile network", contentLeft, homeSubtitleY(),
-                    McnTheme.TEXT_CAPTION, PhoneColors.textSecondary(style), false);
+            drawHomeText(graphics, java.time.LocalTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                    contentLeft, homeGreetingY(),
+                    McnTheme.TEXT_HEADER, 0xFFFFFFFF, true);
+            drawHomeText(graphics, java.time.LocalDate.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMM d")),
+                    contentLeft, homeSubtitleY(),
+                    McnTheme.TEXT_CAPTION, 0xFFE7E6F2, false);
+    }
+
+    private void activateHomeEditingIfHeld() {
+        if (!pressedApp.isEmpty() && !editingHome && !movedApp
+                && net.minecraft.Util.getMillis() - appPressedAt >= 500L
+                && appQuery.isBlank() && !ClientPhoneCache.lowPowerMode()) {
+            editingHome = true;
+            pendingRemoval = "";
+            if (searchBox != null) searchBox.setFocused(false);
+        }
     }
 
     private void renderHomeApps(GuiGraphics graphics, int mouseX, int mouseY) {
         PhoneStyle style = ClientPhoneCache.phoneStyle();
-        for (AppShortcut shortcut : homeShortcuts) {
+        activateHomeEditingIfHeld();
+        long now = net.minecraft.Util.getMillis();
+        float delta = lastIconFrame == 0 ? 1.0F : Math.min(0.1F, Math.max(0, now - lastIconFrame) / 1000.0F);
+        lastIconFrame = now;
+        float blend = 1.0F - (float) Math.exp(-delta / 0.10F);
+        homeIconPositions.keySet().retainAll(homeShortcuts.stream().map(AppShortcut::id).toList());
+        java.util.List<AppShortcut> drawOrder = new java.util.ArrayList<>(homeShortcuts);
+        drawOrder.sort(java.util.Comparator.comparing(app -> app.id().equals(pressedApp)));
+        for (AppShortcut shortcut : drawOrder) {
             int x = leftPos + shortcut.x();
             int y = topPos + shortcut.y();
+            float[] position = homeIconPositions.computeIfAbsent(shortcut.id(), id -> new float[] {x, y});
+            position[0] += (x - position[0]) * blend;
+            position[1] += (y - position[1]) * blend;
+            graphics.pose().pushPose();
+            graphics.pose().translate(position[0] - x, position[1] - y, 0.0F);
+            if (editingHome && pressedApp.equals(shortcut.id())) {
+                graphics.pose().translate(dragX - pressX, dragY - pressY, 20.0D);
+            } else if (editingHome && style == PhoneStyle.IOS) {
+                float phase = (shortcut.id().hashCode() & 255) * 0.037F;
+                float angle = (float) Math.sin(now / 155.0D + phase) * 1.7F;
+                graphics.pose().translate(x + McnTheme.ICON_TILE_GRID / 2.0F,
+                        y + McnTheme.ICON_TILE_GRID / 2.0F, 0.0F);
+                graphics.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(angle));
+                graphics.pose().translate(-x - McnTheme.ICON_TILE_GRID / 2.0F,
+                        -y - McnTheme.ICON_TILE_GRID / 2.0F, 0.0F);
+            }
             int tileSize = McnTheme.ICON_TILE_GRID;
             int labelWidth = tileSize + McnTheme.SPACE_XS;
             boolean hovered = mouseX >= x && mouseX < x + tileSize
                     && mouseY >= y && mouseY < y + tileSize + McnTheme.SPACE_XXS + McnTheme.TEXT_CAPTION;
             boolean hasTexture = McnIconRegistry.hasPngTexture(shortcut.id());
             var png = hasTexture ? McnIconRegistry.getPngLocation(shortcut.id()) : null;
-            McnPrimitives.drawIconTile(graphics, style, font, x, y, tileSize,
-                    shortcut.color(), png, McnIconRegistry.getGlyph(shortcut.id()));
-            String label = shortcut.label();
-            int maxFontWidth = (int) (labelWidth * (font.lineHeight / (float) McnTheme.TEXT_CAPTION));
-            if (font.width(label) > maxFontWidth) {
-                label = font.plainSubstrByWidth(label,
-                        Math.max(McnTheme.RADIUS_NONE, maxFontWidth - font.width("..."))) + "...";
+            if (style == PhoneStyle.IOS) {
+                var snappleIcon = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                        "mobilecellnetwork", "textures/gui/snapple_apps/" + shortcut.id() + ".png");
+                graphics.blit(snappleIcon, x, y, tileSize, tileSize,
+                        0.0F, 0.0F, 256, 256, 256, 256);
+            } else {
+                McnPrimitives.drawIconTile(graphics, style, font, x, y, tileSize,
+                        shortcut.color(), png, McnIconRegistry.getGlyph(shortcut.id()));
             }
+            String label = shortcut.label();
             int labelX = x;
             int labelY = y + tileSize + McnTheme.SPACE_XXS;
-            drawHomeCenteredText(graphics, label, labelX + tileSize / McnTheme.SPACE_XXS,
-                    labelY, McnTheme.TEXT_CAPTION,
-                    PhoneColors.textPrimary(style));
+            boolean dock = (style == PhoneStyle.IOS || style == PhoneStyle.SAMSUNG_ONE_UI)
+                    && appQuery.isBlank() && shortcut.y() == 305;
+            if (!dock) {
+                if (style == PhoneStyle.IOS) {
+                    float naturalScale = 9.0F / font.lineHeight;
+                    int measuredWidth = font.width(SnappleText.text(label));
+                    float scale = Math.min(naturalScale, (tileSize + 6.0F) / Math.max(1, measuredWidth));
+                    graphics.pose().pushPose();
+                    graphics.pose().translate(labelX + tileSize / 2.0F, labelY, 0.0F);
+                    graphics.pose().scale(scale, scale, 1.0F);
+                    SnappleText.centered(graphics, font, label, 0, 0, 0xFFFFFFFF);
+                    graphics.pose().popPose();
+                } else {
+                    float scale = Math.min(9.0F / font.lineHeight,
+                            (labelWidth - 2.0F) / Math.max(1, font.width(label)));
+                    graphics.pose().pushPose();
+                    graphics.pose().translate(labelX + tileSize / 2.0F, labelY, 0.0F);
+                    graphics.pose().scale(scale, scale, 1.0F);
+                    graphics.drawCenteredString(font, label, 0, 0, 0xFFFFFFFF);
+                    graphics.pose().popPose();
+                }
+            }
             if ("phone".equals(shortcut.id()) && ClientSmsCache.missedCallCount() > 0) {
                 McnPrimitives.drawBadge(graphics, style, font,
                         x + tileSize - McnTheme.ICON_TILE_SM, y,
                         McnTheme.ICON_TILE_SM,                         McnTheme.BADGE_HEIGHT,
                         ClientSmsCache.missedCallCount());
+            }
+            if (editingHome && removableApp(shortcut.id())) {
+                McnPrimitives.fillRoundedRect(graphics, x - 5, y - 5, 14, 14, 7, 0xFFB32C36);
+                graphics.drawCenteredString(font, "-", x + 2, y - 3, 0xFFFFFFFF);
+            }
+            graphics.pose().popPose();
+        }
+        if (editingHome) {
+            McnPrimitives.fillRoundedRect(graphics, leftPos + 145, topPos + 31, 53, 21, 10, 0xDD263B62);
+            graphics.drawCenteredString(font, "Done", leftPos + 171, topPos + 37, 0xFFFFFFFF);
+            if (!pendingRemoval.isEmpty()) {
+                graphics.drawCenteredString(font, "Tap - again to delete", leftPos + imageWidth / 2,
+                        topPos + 244, 0xFFFFFFFF);
             }
         }
     }
@@ -507,11 +855,21 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
                     ? ClientSignalCache.networkName() : "No Service";
             String time = java.time.LocalTime.now()
                     .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
-            McnPrimitives.drawStatusBar(graphics, style, font, leftPos, topPos, imageWidth,
-                    carrier, time, hasService ? ClientSignalCache.bars() : 0,
-                    PhoneFrame.phoneChargePercent(), ClientSignalCache.roaming(), hasService);
+            if (style == PhoneStyle.SAMSUNG_ONE_UI && !ClientPhoneCache.phoneDead()) {
+                McnPrimitives.drawAndroidStatusBar(graphics, font, leftPos, topPos, imageWidth, time,
+                        hasService ? ClientSignalCache.bars() : 0, PhoneFrame.phoneChargePercent(),
+                        ClientSignalCache.roaming(), hasService, true);
+            } else if (style == PhoneStyle.IOS && !ClientPhoneCache.phoneDead()) {
+                McnPrimitives.drawSnappleStatusBar(graphics, font, leftPos, topPos, imageWidth, time,
+                        hasService ? ClientSignalCache.bars() : 0, PhoneFrame.phoneChargePercent(),
+                        ClientSignalCache.roaming(), hasService, true);
+            } else {
+                McnPrimitives.drawStatusBar(graphics, style, font, leftPos, topPos, imageWidth,
+                        carrier, time, hasService ? ClientSignalCache.bars() : 0,
+                        PhoneFrame.phoneChargePercent(), ClientSignalCache.roaming(), hasService);
+            }
             PhoneNavigation.render(graphics, this);
-            graphics.pose().popPose();
+            PhoneFrame.finishPhoneTransform(graphics);
         }
 
     private void drawHomeText(GuiGraphics graphics, String text, int x, int y,
@@ -520,7 +878,11 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, McnTheme.ELEV_0);
         graphics.pose().scale(scale, scale, McnTheme.ELEV_1);
-        graphics.drawString(font, text, McnTheme.RADIUS_NONE, McnTheme.RADIUS_NONE, color, shadow);
+        if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+            SnappleText.draw(graphics, font, text, 0, 0, color);
+        } else {
+            graphics.drawString(font, text, 0, 0, color, shadow);
+        }
         graphics.pose().popPose();
     }
 
@@ -530,7 +892,11 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         graphics.pose().pushPose();
         graphics.pose().translate(centerX, y, McnTheme.ELEV_0);
         graphics.pose().scale(scale, scale, McnTheme.ELEV_1);
-        graphics.drawCenteredString(font, text, McnTheme.RADIUS_NONE, McnTheme.RADIUS_NONE, color);
+        if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+            SnappleText.centered(graphics, font, text, 0, 0, color);
+        } else {
+            graphics.drawCenteredString(font, text, 0, 0, color);
+        }
         graphics.pose().popPose();
     }
 
@@ -549,6 +915,9 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
 
     private void openApp(PhoneApp app) {
         if (ClientPhoneCache.phoneDead()) {
+            return;
+        }
+        if (app == PhoneApp.FACETIME && !isAppAvailable(app)) {
             return;
         }
         if (!isAllowedInLowPower(app)) {
@@ -620,6 +989,10 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         }
         if (app == PhoneApp.PHONE) {
             Minecraft.getInstance().setScreen(new DialerScreen(menu));
+            return;
+        }
+        if (app == PhoneApp.FACETIME) {
+            Minecraft.getInstance().setScreen(new FaceTimeScreen(menu));
             return;
         }
         currentApp = app;
@@ -708,13 +1081,6 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         graphics.drawString(font, text, centerX - font.width(text) / 2, y, color, true);
     }
 
-    private String timeGreeting() {
-        long ticks = Minecraft.getInstance().level == null ? 0L
-                : Math.floorMod(Minecraft.getInstance().level.getDayTime(), 24_000L);
-        int hour = (int) (ticks / 1_000L);
-        return hour < 6 ? "evening" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-    }
-
     @Override
     public boolean isPauseScreen() {
         return false;
@@ -722,6 +1088,11 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (editingHome && keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+            editingHome = false;
+            pendingRemoval = "";
+            return true;
+        }
         if (searchBox != null && searchBox.isFocused()) {
             if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER && !homeAppButtons.isEmpty()) {
                 homeAppButtons.get(0).onPress();
@@ -741,7 +1112,7 @@ public final class PhoneScreen extends AbstractContainerScreen<PhoneMenu> implem
         MAP("Map", PhoneAppColors.MAP), STORE("App Store", "store", PhoneAppColors.STORE),
         SOCIALS("Socials", PhoneAppColors.SOCIALS), BANK("Bank", PhoneAppColors.BANK),
         SETTINGS("Settings", PhoneAppColors.SETTINGS), PLAN("Plan", PhoneAppColors.PLAN),
-        VOICEMAIL("Voicemail", PhoneAppColors.VOICEMAIL),
+        VOICEMAIL("Voicemail", PhoneAppColors.VOICEMAIL), FACETIME("FaceTime", "facetime", PhoneAppColors.PHONE),
         CAMERA("Camera", PhoneAppColors.CAMERA), GALLERY("Gallery", PhoneAppColors.GALLERY),
         FLASHLIGHT("Flashlight", PhoneAppColors.FLASHLIGHT);
 

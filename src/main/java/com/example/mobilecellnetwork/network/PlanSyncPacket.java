@@ -29,7 +29,7 @@ public record PlanSyncPacket(List<PlanEntry> plans, String activePlanId, long cy
                     ByteBufCodecs.STRING_UTF8.encode(buffer, plan.maxSignalTier());
                     buffer.writeVarInt(plan.callMinutes());
                     buffer.writeVarInt(plan.textMessages());
-                    buffer.writeVarInt(plan.allowedNetworks().size());
+                    buffer.writeVarInt(Math.min(plan.allowedNetworks().size(), 64));
                     plan.allowedNetworks().stream().limit(64).forEach(value -> ByteBufCodecs.STRING_UTF8.encode(buffer, value));
                     ByteBufCodecs.STRING_UTF8.encode(buffer, plan.carrierNetworkId());
                     ByteBufCodecs.STRING_UTF8.encode(buffer, plan.carrierNetworkName());

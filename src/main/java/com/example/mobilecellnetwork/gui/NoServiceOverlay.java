@@ -2,8 +2,7 @@ package com.example.mobilecellnetwork.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.Font;
-import net.minecraft.network.chat.Component;
-import com.example.mobilecellnetwork.gui.PhoneStyle;
+import com.example.mobilecellnetwork.gui.theme.McnPrimitives;
 
 public final class NoServiceOverlay {
 
@@ -25,21 +24,36 @@ public final class NoServiceOverlay {
     public static void render(GuiGraphics g, PhoneStyle style, int screenX, int screenY,
                               int screenW, int screenH, String appName, Font font) {
         int centerX = screenX + screenW / 2;
-        int centerY = screenY + screenH / 2;
+        McnPrimitives.fillRoundedRect(g, screenX, screenY, screenW, screenH,
+                12, PhoneColors.bgPrimary(style));
+        centered(g, font, style, appName, centerX, screenY + 13, PhoneColors.textSecondary(style));
+        McnPrimitives.fillRoundedRect(g, screenX + 10, screenY + 43, screenW - 20, 162,
+                14, PhoneColors.bgSecondary(style));
+        McnPrimitives.fillRoundedRect(g, centerX - 24, screenY + 56, 48, 48,
+                24, PhoneColors.bgTertiary(style));
+        int icon = PhoneColors.textSecondary(style);
+        for (int i = 0; i < 4; i++) {
+            int barHeight = 5 + i * 4;
+            g.fill(centerX - 14 + i * 7, screenY + 92 - barHeight,
+                    centerX - 10 + i * 7, screenY + 92, icon);
+        }
+        for (int i = 0; i < 26; i++) {
+            g.fill(centerX - 13 + i, screenY + 68 + i,
+                    centerX - 11 + i, screenY + 70 + i, PhoneColors.error(style));
+        }
+        centered(g, font, style, "No active plan", centerX, screenY + 118, PhoneColors.textPrimary(style));
+        centered(g, font, style, "Mobile service is unavailable.", centerX, screenY + 141,
+                PhoneColors.textSecondary(style));
+        centered(g, font, style, "Open Plan to choose a plan.", centerX, screenY + 156,
+                PhoneColors.textSecondary(style));
+    }
 
-        // App name at top (12pt textSecondary, centered)
-        String appLabel = Component.literal(appName).getString();
-        g.drawString(font, appLabel, centerX - font.width(appLabel) / 2, screenY + 12,
-                PhoneColors.textSecondary(style), true);
-
-        // "No Service" in the middle (16pt error color, centered)
-        String noService = Component.literal("No Service").getString();
-        g.drawString(font, noService, centerX - font.width(noService) / 2, centerY - 8,
-                PhoneColors.error(style), true);
-
-        // Instruction at bottom (11pt textSecondary, centered)
-        String instruction = Component.literal("Open the Plan app to choose a plan").getString();
-        g.drawString(font, instruction, centerX - font.width(instruction) / 2, centerY + 24,
-                PhoneColors.textSecondary(style), true);
+    private static void centered(GuiGraphics graphics, Font font, PhoneStyle style, String text,
+                                 int centerX, int y, int color) {
+        if (style == PhoneStyle.IOS) {
+            SnappleText.centered(graphics, font, text, centerX, y, color);
+        } else {
+            graphics.drawCenteredString(font, text, centerX, y, color);
+        }
     }
 }

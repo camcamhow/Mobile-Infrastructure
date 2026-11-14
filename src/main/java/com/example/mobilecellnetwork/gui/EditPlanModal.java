@@ -42,6 +42,7 @@ public final class EditPlanModal extends Screen {
     private String carrierNetworkId;
     private String errorField = "";
     private String errorMessage = "";
+    private boolean awaitingSave;
     private int modalX, modalY, modalW, modalH, contentTop, contentBottom, contentHeight;
     private Button okButton, cancelButton;
     private final List<SectionLine> sections = new ArrayList<>();
@@ -68,6 +69,9 @@ public final class EditPlanModal extends Screen {
         autoRenew = initial.autoRenew();
         isDefault = initial.isDefault();
         carrierNetworkId = initial.carrierNetworkId();
+        if (creating && carrierNetworkId.isBlank() && networks.size() == 1) {
+            carrierNetworkId = networks.getFirst().id();
+        }
         speedIndex = Math.max(0, SPEEDS.indexOf(parseSpeed(initial.speed())));
         tierIndex = Math.max(0, TIERS.indexOf(parseTier(initial.tier())));
         for (String id : initial.allowedNetworks().split(",")) {
@@ -84,7 +88,7 @@ public final class EditPlanModal extends Screen {
         modalX = (width - modalW) / 2;
         modalY = (height - modalH) / 2;
         contentTop = modalY + 40;
-        contentBottom = modalY + modalH - 28;
+        contentBottom = modalY + modalH - 46;
         int half = (modalW - 36) / 2;
         int leftX = modalX + 12;
         int rightX = leftX + half + 12;
@@ -135,6 +139,7 @@ public final class EditPlanModal extends Screen {
         y += FIELD_STEP;
 
         y = section("Carrier and access", y);
+        fieldOffsets.put("carrier", y);
         buttonRow("Plan carrier: " + carrierNetworkName(), leftX, y, modalW - 24, () -> {
             captureInputs();
             if (networks.isEmpty()) {
@@ -235,6 +240,7 @@ public final class EditPlanModal extends Screen {
     }
 
     private void submit() {
+        if (awaitingSave) return;
         captureInputs();
         errorField = "";
         errorMessage = "";
@@ -263,18 +269,39 @@ public final class EditPlanModal extends Screen {
             invalid("feeMinute", "Fee must be non-negative.");
         } else if (!validLong("feeMb", 0, Long.MAX_VALUE)) {
             invalid("feeMb", "Fee must be non-negative.");
+        } else if (carrierNetworkId.isBlank()
+                || networks.stream().noneMatch(network -> network.id().equals(carrierNetworkId))) {
+            invalid("carrier", networks.isEmpty()
+                    ? "Create a network before creating a plan."
+                    : "Select a carrier network for this plan.");
         } else {
-            onConfirm.accept(List.of(values.get("id"), values.get("name").trim(), values.get("description"),
+            List<String> fields = List.of(values.get("id"), values.get("name").trim(), values.get("description"),
                     values.get("price"), values.get("cycle"), values.get("minutes"), values.get("texts"),
                     values.get("data"), SPEEDS.get(speedIndex).name(), TIERS.get(tierIndex).name(),
                     Boolean.toString(allowRoaming), values.get("feeMinute"), values.get("feeMb"),
                     Boolean.toString(autoRenew), Boolean.toString(isDefault), String.join(",", allowedNetworks),
-                    carrierNetworkId));
-            returnToParent();
+                    carrierNetworkId);
+            if (String.join("|", fields.subList(1, fields.size())).length() > 1200) {
+                invalid("carrier", "Plan details are too long to save.");
+                scrollToError();
+                recreateWidgets();
+                return;
+            }
+            awaitingSave = true;
+            errorMessage = "Saving plan...";
+            onConfirm.accept(fields);
             return;
         }
+
         scrollToError();
         recreateWidgets();
+    }
+
+    public void saveResult(boolean success, String message) {
+        if (!awaitingSave) return;
+        awaitingSave = false;
+        if (success) returnToParent();
+        else errorMessage = message;
     }
 
     private boolean validLong(String key, long min, long max) {
@@ -312,6 +339,10 @@ public final class EditPlanModal extends Screen {
         graphics.drawString(font, title, modalX + 12, modalY + 10, PhoneColors.PRIMARY_TEXT, true);
         graphics.drawString(font, "Scroll to view all fields", modalX + 12, modalY + 20,
                 PhoneColors.SECONDARY_TEXT, true);
+        if (!errorMessage.isEmpty()) {
+            graphics.drawString(font, fitText(errorMessage, modalW - 24), modalX + 12,
+                    modalY + modalH - 34, PhoneColors.ERROR_TEXT, true);
+        }
         graphics.enableScissor(modalX + 8, contentTop, modalX + modalW - 8, contentBottom);
         for (SectionLine line : sections) {
             int y = contentTop + line.y() - scroll;
@@ -338,8 +369,6 @@ public final class EditPlanModal extends Screen {
             graphics.fill(x - 1, y + h, x + w + 1, y + h + 1, PhoneColors.ERROR_TEXT);
             graphics.fill(x - 1, y, x, y + h, PhoneColors.ERROR_TEXT);
             graphics.fill(x + w, y, x + w + 1, y + h, PhoneColors.ERROR_TEXT);
-            graphics.drawString(font, fitText(errorMessage, modalW - 24), modalX + 12,
-                    y + h + 2, PhoneColors.ERROR_TEXT, true);
         }
     }
 

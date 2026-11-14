@@ -3,6 +3,8 @@ package com.example.mobilecellnetwork.network;
 import com.example.mobilecellnetwork.blockentity.AntennaBlockEntity;
 import com.example.mobilecellnetwork.blockentity.AntennaPowerState;
 import com.example.mobilecellnetwork.blockentity.AntennaRoamingPolicy;
+import com.example.mobilecellnetwork.blockentity.TestAntennaBlockEntity;
+import com.example.mobilecellnetwork.blockentity.SignalBoosterBlockEntity;
 import com.example.mobilecellnetwork.capabilities.ModCapabilities;
 import com.example.mobilecellnetwork.capabilities.PhoneData;
 import com.example.mobilecellnetwork.capabilities.PlanUsage;
@@ -58,7 +60,37 @@ public final class CoverageEngine {
                 player.getData(ModCapabilities.PHONE_DATA));
     }
 
+    public static SignalResult updateTestSignal(ServerPlayer player, AntennaBlockEntity antenna) {
+        if (antenna == null) {
+            return new SignalResult(SignalTier.NO_SERVICE, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0);
+        }
+        return updateSignalAt(player.serverLevel(), player.position(), antenna, null,
+                player.getData(ModCapabilities.PHONE_DATA));
+    }
+
     private static SignalResult updateSignalAt(
+            ServerLevel level, Vec3 playerPos, AntennaBlockEntity antenna, String planId,
+            com.example.mobilecellnetwork.capabilities.PhoneData phoneData
+    ) {
+        SignalResult best = directSignalAt(level, playerPos, antenna, planId, phoneData);
+        for (SignalBoosterBlockEntity booster : SignalBoosterBlockEntity.nearby(level, playerPos)) {
+            SignalResult upstream = directSignalAt(level, booster.center(), antenna, planId, phoneData);
+            if (upstream.tier() == SignalTier.NO_SERVICE) continue;
+            double distance = playerPos.distanceTo(booster.center());
+            LineOfSight.Result los = LineOfSight.compute(level, playerPos, booster.center());
+            double local = Math.max(0.0D, 1.0D - distance / SignalBoosterBlockEntity.RANGE
+                    - los.attenuation() * MobileCellNetworkConfig.LOS_WEIGHT.get());
+            double strength = Math.min(upstream.finalStrength(), local);
+            SignalTier tier = applyTierCap(strengthToTier(strength), upstream.tier());
+            if (tier != SignalTier.NO_SERVICE && strength > best.finalStrength()) {
+                best = new SignalResult(tier, strength, distance, SignalBoosterBlockEntity.RANGE,
+                        local, los.attenuation(), los.sampleCount());
+            }
+        }
+        return best;
+    }
+
+    private static SignalResult directSignalAt(
             ServerLevel level, Vec3 playerPos, AntennaBlockEntity antenna, String planId,
             com.example.mobilecellnetwork.capabilities.PhoneData phoneData
     ) {
@@ -92,8 +124,10 @@ public final class CoverageEngine {
                 baseStrength - los.attenuation() * MobileCellNetworkConfig.LOS_WEIGHT.get());
         SignalTier tier = strengthToTier(finalStrength);
         tier = applyTierCap(tier, antenna.getTier().maxSignalTier());
-        SignalTier planCap = PlanRegistry.getPlan(planId).maxSignalTier();
-        tier = applyTierCap(tier, planCap);
+        if (planId != null) {
+            SignalTier planCap = PlanRegistry.getPlan(planId).maxSignalTier();
+            tier = applyTierCap(tier, planCap);
+        }
         if (phoneData != null && phoneData.getCharge() > 0 && phoneData.isLowPower()
                 && MobileCellNetworkConfig.LOW_POWER_ENABLED.get()) {
             tier = applyTierCap(tier, MobileCellNetworkConfig.LOW_POWER_MAX_SIGNAL_TIER.get());
@@ -162,15 +196,39 @@ public final class CoverageEngine {
     private static List<AntennaSignal> candidateTowers(ServerPlayer player) {
         ServerLevel level = player.serverLevel();
         double candidateRange = configuredMaximumRange()
-                * MobileCellNetworkConfig.INVERSE_MAX_RANGE_MULTIPLIER.get();
+                * MobileCellNetworkConfig.INVERSE_MAX_RANGE_MULTIPLIER.get() + SignalBoosterBlockEntity.RANGE;
         return findLoadedAntennas(level, player.blockPosition(), (int) Math.ceil(candidateRange)).stream()
                 .filter(CoverageEngine::isOperational)
                 .filter(antenna -> isNetworkAllowed(level, antenna))
                 .filter(antenna -> isNetworkOnline(level, antenna))
+                .filter(antenna -> !(antenna instanceof TestAntennaBlockEntity)
+                        || hasActivePlanAndNetwork(player, antenna))
                 .filter(antenna -> roamingDecision(player, antenna).allowed())
                 .map(antenna -> new AntennaSignal(antenna, updateSignal(player, antenna)))
                 .filter(candidate -> candidate.signal().tier() != SignalTier.NO_SERVICE)
                 .toList();
+    }
+
+    private static boolean hasActivePlanAndNetwork(ServerPlayer player, AntennaBlockEntity antenna) {
+        PlanUsage usage = player.getData(ModCapabilities.PLAN_USAGE);
+        return usage.isCycleActive() && !usage.getActivePlanId().isBlank()
+                && PlanRegistry.findPlan(usage.getActivePlanId()) != null
+                && NetworkSavedData.get(player.server.overworld()).getNetwork(antenna.getNetworkId()) != null;
+    }
+
+    public static AntennaBlockEntity getStrongestTestAntennaFor(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        int radius = (int) Math.ceil(configuredMaximumRange()
+                * MobileCellNetworkConfig.INVERSE_MAX_RANGE_MULTIPLIER.get() + SignalBoosterBlockEntity.RANGE);
+        return findLoadedAntennas(level, player.blockPosition(), radius).stream()
+                .filter(CoverageEngine::isOperational)
+                .filter(antenna -> antenna instanceof TestAntennaBlockEntity
+                        || (isNetworkAllowed(level, antenna) && isNetworkOnline(level, antenna)))
+                .map(antenna -> new AntennaSignal(antenna, updateTestSignal(player, antenna)))
+                .filter(candidate -> candidate.signal().tier() != SignalTier.NO_SERVICE)
+                .max(Comparator.comparingDouble(candidate -> candidate.signal().finalStrength()))
+                .map(AntennaSignal::antenna)
+                .orElse(null);
     }
 
     public static void setPreferredTower(ServerPlayer player, Long pos) {
@@ -459,22 +517,31 @@ public final class CoverageEngine {
                 antenna.addUser(player.getUUID());
             }
             drainPhone(player);
-            SignalResult signalResult = updateSignal(player, antenna);
+            boolean testing = NetworkSavedData.get(player.server.overworld()).isSignalTestEnabled(player.getUUID());
+            AntennaBlockEntity displayAntenna = testing ? getStrongestTestAntennaFor(player) : antenna;
+            SignalResult signalResult = testing ? updateTestSignal(player, displayAntenna)
+                    : updateSignal(player, antenna);
             SignalTier signal = signalResult.tier();
-            String networkName = antenna == null ? "" : displayNetworkName(player, antenna);
+            String networkName = displayAntenna == null ? ""
+                    : testing ? "TEST " + getNetworkName(player.serverLevel(), displayAntenna)
+                    : displayNetworkName(player, antenna);
             ConnectionState connection = CONNECTIONS.get(player.getUUID());
-            boolean roaming = connection != null && connection.roaming();
-            RoamingManager.notifyRoaming(player, roaming, networkName);
+            boolean realRoaming = connection != null && connection.roaming();
+            RoamingManager.notifyRoaming(player, realRoaming,
+                    antenna == null ? "" : testing ? displayNetworkName(player, antenna) : networkName);
+            boolean roaming = !testing && realRoaming;
             long roamingFees = roamingFeesThisSession(player);
-            String networkId = antenna == null ? "" : antenna.getNetworkId();
+            String networkId = displayAntenna == null ? "" : displayAntenna.getNetworkId();
             int count = getAntennaCountInRange(player.serverLevel(), player.blockPosition());
             LastSignal current = new LastSignal(signal, networkName, networkId,
                     player.serverLevel().dimension().location().toString(), count,
-                    antenna == null ? "" : antenna.getPowerState().name(), signalResult.finalStrength(),
-                    MobileCellNetworkConfig.DEBUG_SIGNAL_INFO.get(), roaming, roamingFees);
+                    displayAntenna == null ? "" : displayAntenna.getPowerState().name(), signalResult.finalStrength(),
+                    testing || MobileCellNetworkConfig.DEBUG_SIGNAL_INFO.get(), roaming, roamingFees);
             if (!current.equals(LAST_SIGNALS.get(player.getUUID()))) {
-                boolean debug = MobileCellNetworkConfig.DEBUG_SIGNAL_INFO.get();
-                int signalBars = SignalBarCalculator.computeBars(signalResult.finalStrength(), signal);
+                boolean debug = testing || MobileCellNetworkConfig.DEBUG_SIGNAL_INFO.get();
+                int signalBars = testing || displayAntenna instanceof TestAntennaBlockEntity
+                        ? SignalBarCalculator.computeCoverageBars(signalResult.finalStrength(), signal)
+                        : SignalBarCalculator.computeBars(signalResult.finalStrength(), signal);
                 PacketDistributor.sendToPlayer(player, new SignalUpdatePacket(signal, networkName, networkId, count,
                         signalBars, signalResult.finalStrength(), debug,
                         debug ? signalResult.distance() : 0.0D,
@@ -499,10 +566,14 @@ public final class CoverageEngine {
 
     private static AntennaBlockEntity strongestAntennaAt(ServerLevel level, BlockPos position, String planId) {
         return findLoadedAntennas(level, position,
-                (int) Math.ceil(configuredMaximumRange() * MobileCellNetworkConfig.INVERSE_MAX_RANGE_MULTIPLIER.get())).stream()
+                (int) Math.ceil(configuredMaximumRange() * MobileCellNetworkConfig.INVERSE_MAX_RANGE_MULTIPLIER.get()
+                        + SignalBoosterBlockEntity.RANGE)).stream()
                 .filter(CoverageEngine::isOperational)
                 .filter(antenna -> isNetworkAllowed(level, antenna))
                 .filter(antenna -> isNetworkOnline(level, antenna))
+                .filter(antenna -> !(antenna instanceof TestAntennaBlockEntity)
+                        || (!planId.isBlank() && PlanRegistry.findPlan(planId) != null
+                        && NetworkSavedData.get(level.getServer().overworld()).getNetwork(antenna.getNetworkId()) != null))
                 .filter(antenna -> isPlanNetworkAllowed(planId, antenna))
                 .map(antenna -> new AntennaSignal(antenna,
                         updateSignalAt(level, Vec3.atCenterOf(position), antenna, "default", null)))
@@ -550,7 +621,20 @@ public final class CoverageEngine {
         if (!settings.hasServerBlock()) {
             return MobileCellNetworkConfig.ALLOW_NETWORK_WITHOUT_SERVER_BLOCK.get();
         }
-        return settings.isServerOnline();
+        return isServerOnline(level.getServer(), settings);
+    }
+
+    public static boolean isServerOnline(net.minecraft.server.MinecraftServer server,
+                                         com.example.mobilecellnetwork.data.NetworkSettings settings) {
+        if (!settings.hasServerBlock() || !settings.isServerOnline()) return false;
+        var dimension = net.minecraft.resources.ResourceLocation.tryParse(settings.getServerBlockDimension());
+        if (dimension == null) return false;
+        ServerLevel level = server.getLevel(net.minecraft.resources.ResourceKey.create(
+                net.minecraft.core.registries.Registries.DIMENSION, dimension));
+        BlockPos pos = BlockPos.of(settings.getServerBlockPos());
+        return level != null && level.hasChunkAt(pos)
+                && level.getBlockEntity(pos) instanceof com.example.mobilecellnetwork.blockentity.ServerBlockEntity rack
+                && rack.isPowered();
     }
 
     private static boolean isPlanNetworkAllowed(String planId, AntennaBlockEntity antenna) {
@@ -653,14 +737,14 @@ public final class CoverageEngine {
         java.util.UUID activePhoneId = PhoneDeviceService.activePhoneId(player);
         if (activePhoneId != null) {
             for (ItemStack stack : player.getInventory().items) {
-                if (stack.is(ModItems.CELLPHONE.get())
+                if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)
                         && activePhoneId.equals(stack.get(com.example.mobilecellnetwork.registry.ModDataComponents
                         .PHONE_ID.get()))) {
                     return stack;
                 }
             }
             for (ItemStack stack : player.getInventory().offhand) {
-                if (stack.is(ModItems.CELLPHONE.get())
+                if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)
                         && activePhoneId.equals(stack.get(com.example.mobilecellnetwork.registry.ModDataComponents
                         .PHONE_ID.get()))) {
                     return stack;
@@ -669,10 +753,10 @@ public final class CoverageEngine {
             return ItemStack.EMPTY;
         }
         for (ItemStack stack : player.getInventory().items) {
-            if (stack.is(ModItems.CELLPHONE.get())) return stack;
+            if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) return stack;
         }
         for (ItemStack stack : player.getInventory().offhand) {
-            if (stack.is(ModItems.CELLPHONE.get())) return stack;
+            if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(stack)) return stack;
         }
         return ItemStack.EMPTY;
     }

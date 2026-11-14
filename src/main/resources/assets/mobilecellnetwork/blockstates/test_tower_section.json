@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "mobilecellnetwork:block/test_tower_section" }
+  }
+}

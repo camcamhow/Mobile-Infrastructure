@@ -64,14 +64,6 @@ public final class PhonePhotoLibrary {
         return save(bytes, source.getFileName().toString());
     }
 
-    public static Photo captureScreenshot() throws IOException {
-        byte[] screenshot = CameraPreviewCapture.latestFrame();
-        if (screenshot.length == 0) {
-            throw new IOException("Camera view is not ready yet. Wait for the preview, then try again.");
-        }
-        return saveCapturedImage(screenshot);
-    }
-
     public static Photo saveCapturedImage(byte[] bytes) throws IOException {
         validateImage(bytes);
         return save(bytes, "Camera_" + System.currentTimeMillis() + ".jpg");
@@ -146,9 +138,10 @@ public final class PhonePhotoLibrary {
         Files.createDirectories(gallery);
         try (var paths = Files.list(gallery)) {
             return paths.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".jpg")
-                            || path.getFileName().toString().endsWith(".png")
-                            || path.getFileName().toString().endsWith(".jpeg"))
+                    .filter(path -> {
+                        String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+                        return name.endsWith(".jpg") || name.endsWith(".png") || name.endsWith(".jpeg");
+                    })
                     .sorted(Comparator.comparingLong(PhonePhotoLibrary::modified).reversed())
                     .map(PhonePhotoLibrary::readPhoto)
                     .filter(java.util.Objects::nonNull)
@@ -189,7 +182,15 @@ public final class PhonePhotoLibrary {
         Path gallery = galleryPath();
         Files.createDirectories(gallery);
         String safeName = Path.of(name).getFileName().toString().replaceAll("[^A-Za-z0-9_.-]", "_");
-        String fileName = System.currentTimeMillis() + "_" + safeName;
+        String prefix = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8) + "_";
+        int maxNameLength = 128 - prefix.length();
+        if (safeName.length() > maxNameLength) {
+            int extension = safeName.lastIndexOf('.');
+            String suffix = extension >= 0 && safeName.length() - extension <= 6
+                    ? safeName.substring(extension) : "";
+            safeName = safeName.substring(0, maxNameLength - suffix.length()) + suffix;
+        }
+        String fileName = prefix + safeName;
         Path destination = gallery.resolve(fileName);
         Files.write(destination, bytes);
         if (activePhoneId != null && bytes.length <= MAX_IMAGE_BYTES) {
@@ -228,6 +229,27 @@ public final class PhonePhotoLibrary {
             Files.write(gallery.resolve(name), bytes);
         } catch (IOException exception) {
             LOGGER.warn("Unable to save a synchronized phone photo.", exception);
+        }
+    }
+
+    public static void removeRemotePhoto(UUID phoneId, String name) {
+        if (phoneId == null || name == null || !name.matches("[A-Za-z0-9_.-]{1,128}")) {
+            LOGGER.warn("Received an invalid phone photo deletion.");
+            return;
+        }
+        try {
+            Files.deleteIfExists(galleryPath(phoneId).resolve(name));
+            var client = Minecraft.getInstance();
+            if (phoneId.equals(activePhoneId) && client.screen instanceof GalleryScreen gallery) {
+                gallery.photoDeleted(name);
+            }
+        } catch (IOException exception) {
+            LOGGER.warn("Unable to remove the local copy of a deleted phone photo.", exception);
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                        "Photo deleted from phone, but its local copy could not be removed."), false);
+            }
         }
     }
 
@@ -282,6 +304,21 @@ public final class PhonePhotoLibrary {
         drawThumbnailWithKey(graphics, cacheKey, bytes, x, y, width, height);
     }
 
+    public static boolean drawProfilePhoto(net.minecraft.client.gui.GuiGraphics graphics, String cacheKey,
+                                           byte[] bytes, int x, int y, int width, int height) {
+        String key = "profile-circle:" + cacheKey + ":" + Integer.toHexString(java.util.Arrays.hashCode(bytes));
+        PhotoTexture texture = TEXTURES.get(key);
+        if (texture == null) {
+            texture = uploadProfileTexture(bytes);
+            if (texture == null) {
+                return false;
+            }
+            TEXTURES.put(key, texture);
+        }
+        graphics.blit(texture.location(), x, y, 0.0F, 0.0F, width, height, width, height);
+        return true;
+    }
+
     private static void drawThumbnailWithKey(net.minecraft.client.gui.GuiGraphics graphics, String key,
                                              byte[] bytes, int x, int y, int width, int height) {
         PhotoTexture texture = TEXTURES.get(key);
@@ -334,6 +371,32 @@ public final class PhonePhotoLibrary {
             return new PhotoTexture(location, width, height);
         } catch (IOException exception) {
             LOGGER.warn("Unable to upload a photo texture for the phone UI.", exception);
+            return null;
+        }
+    }
+
+    private static PhotoTexture uploadProfileTexture(byte[] bytes) {
+        RenderSystem.assertOnRenderThread();
+        try {
+            validateImage(bytes);
+            BufferedImage image = ProfilePhotoImage.create(bytes);
+            int width = image.getWidth();
+            int height = image.getHeight();
+            NativeImage nativeImage = new NativeImage(width, height, false);
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int argb = image.getRGB(x, y);
+                    int abgr = (argb & 0xFF00FF00) | ((argb & 0xFF) << 16) | ((argb >>> 16) & 0xFF);
+                    nativeImage.setPixelRGBA(x, y, abgr);
+                }
+            }
+            DynamicTexture texture = new DynamicTexture(nativeImage);
+            texture.setFilter(true, false);
+            ResourceLocation location = Minecraft.getInstance().getTextureManager()
+                    .register("mobilecellnetwork/photos/" + UUID.randomUUID(), texture);
+            return new PhotoTexture(location, width, height);
+        } catch (IOException exception) {
+            LOGGER.warn("Unable to create the phone profile photo.", exception);
             return null;
         }
     }

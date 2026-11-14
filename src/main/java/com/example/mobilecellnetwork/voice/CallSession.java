@@ -10,6 +10,10 @@ public final class CallSession {
     private State state = State.RINGING;
     private boolean callerMuted;
     private boolean calleeMuted;
+    private boolean callerVideo;
+    private boolean calleeVideo;
+    private long callerVideoFrameAt;
+    private long calleeVideoFrameAt;
     private int minutesUsedThisCall;
     private int ticksElapsed;
 
@@ -66,6 +70,31 @@ public final class CallSession {
             return calleeMuted;
         }
         throw new IllegalArgumentException("Player is not part of this call.");
+    }
+
+    public boolean videoEnabled(UUID player) {
+        if (callerUUID.equals(player)) return callerVideo;
+        if (calleeUUID.equals(player)) return calleeVideo;
+        throw new IllegalArgumentException("Player is not part of this call.");
+    }
+
+    public void setVideoEnabled(UUID player, boolean enabled) {
+        if (callerUUID.equals(player)) callerVideo = enabled;
+        else if (calleeUUID.equals(player)) calleeVideo = enabled;
+        else throw new IllegalArgumentException("Player is not part of this call.");
+    }
+
+    public boolean acceptVideoFrame(UUID player, long now) {
+        if (callerUUID.equals(player)) {
+            if (now - callerVideoFrameAt < 200L) return false;
+            callerVideoFrameAt = now;
+        } else if (calleeUUID.equals(player)) {
+            if (now - calleeVideoFrameAt < 200L) return false;
+            calleeVideoFrameAt = now;
+        } else {
+            throw new IllegalArgumentException("Player is not part of this call.");
+        }
+        return true;
     }
 
     public enum State {

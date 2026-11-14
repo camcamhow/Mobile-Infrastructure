@@ -9,6 +9,8 @@ import com.example.mobilecellnetwork.blockentity.IronAntennaBlockEntity;
 import com.example.mobilecellnetwork.blockentity.PhoneChargerBlockEntity;
 import com.example.mobilecellnetwork.blockentity.ServerBlockEntity;
 import com.example.mobilecellnetwork.blockentity.ShopTerminalBlockEntity;
+import com.example.mobilecellnetwork.blockentity.TestAntennaBlockEntity;
+import com.example.mobilecellnetwork.blockentity.SignalBoosterBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -27,9 +29,15 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<DiamondAntennaBlockEntity>> DIAMOND_ANTENNA =
             BLOCK_ENTITY_TYPES.register("diamond_antenna", () -> BlockEntityType.Builder.of(
                     DiamondAntennaBlockEntity::new, ModBlocks.DIAMOND_ANTENNA.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TestAntennaBlockEntity>> TEST_ANTENNA =
+            BLOCK_ENTITY_TYPES.register("test_antenna", () -> BlockEntityType.Builder.of(
+                    TestAntennaBlockEntity::new, ModBlocks.TEST_ANTENNA.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ServerBlockEntity>> SERVER =
             BLOCK_ENTITY_TYPES.register("server_block", () -> BlockEntityType.Builder.of(
                     ServerBlockEntity::new, ModBlocks.SERVER_BLOCK.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SignalBoosterBlockEntity>> SIGNAL_BOOSTER =
+            BLOCK_ENTITY_TYPES.register("signal_booster", () -> BlockEntityType.Builder.of(
+                    SignalBoosterBlockEntity::new, ModBlocks.SIGNAL_BOOSTER.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AtmBlockEntity>> ATM =
             BLOCK_ENTITY_TYPES.register("atm_block", () -> BlockEntityType.Builder.of(
                     AtmBlockEntity::new, ModBlocks.ATM_BLOCK.get()).build(null));

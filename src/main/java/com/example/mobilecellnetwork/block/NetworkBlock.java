@@ -56,9 +56,7 @@ public class NetworkBlock extends Block implements EntityBlock {
             String networkId = com.example.mobilecellnetwork.network.ServerBlockPlaceHandler
                     .assignOrCreate(serverPlayer, position);
             serverBlock.addManagedNetwork(networkId);
-            if (networkId != null) {
-                serverBlock.openServerMenu(serverPlayer);
-            }
+            serverBlock.openServerMenu(serverPlayer);
         }
     }
 
@@ -72,6 +70,10 @@ public class NetworkBlock extends Block implements EntityBlock {
                 antenna.onBlockTick();
             } else if (blockEntity instanceof com.example.mobilecellnetwork.blockentity.PhoneChargerBlockEntity charger) {
                 charger.tick();
+            } else if (blockEntity instanceof com.example.mobilecellnetwork.blockentity.SignalBoosterBlockEntity booster) {
+                booster.tick();
+            } else if (blockEntity instanceof ServerBlockEntity server) {
+                server.tick();
             }
         };
     }
@@ -88,6 +90,13 @@ public class NetworkBlock extends Block implements EntityBlock {
             return InteractionResult.sidedSuccess(level.isClientSide);
         }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            if (blockEntity instanceof com.example.mobilecellnetwork.blockentity.SignalBoosterBlockEntity booster) {
+                boolean bypass = com.example.mobilecellnetwork.blockentity.InfrastructurePower.bypassed(level);
+                serverPlayer.displayClientMessage(Component.literal("Signal booster: " + booster.getEnergyStored()
+                        + "/" + booster.getMaxEnergyStored() + " FE"
+                        + (bypass ? " | Power bypass" : booster.isPowered() ? " | Powered" : " | No power")), true);
+                return InteractionResult.CONSUME;
+            }
             if (blockEntity instanceof AntennaBlockEntity antenna) {
                 serverPlayer.openMenu(new SimpleMenuProvider(
                         (id, inventory, user) -> new AntennaMenu(id, inventory, antenna),
@@ -108,7 +117,7 @@ public class NetworkBlock extends Block implements EntityBlock {
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos position, BlockState newState,
                             boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && level.getBlockEntity(position)
+        if (!level.isClientSide && !state.is(newState.getBlock()) && level.getBlockEntity(position)
                 instanceof com.example.mobilecellnetwork.blockentity.PhoneChargerBlockEntity charger) {
             net.minecraft.world.item.ItemStack phone = charger.getItemHandler().getStackInSlot(0);
             if (!phone.isEmpty()) {
@@ -118,6 +127,11 @@ public class NetworkBlock extends Block implements EntityBlock {
                 level.addFreshEntity(dropped);
                 charger.getItemHandler().setStackInSlot(0, net.minecraft.world.item.ItemStack.EMPTY);
             }
+        }
+        if (!state.is(newState.getBlock()) && level instanceof net.minecraft.server.level.ServerLevel serverLevel
+                && level.getBlockEntity(position) instanceof AntennaBlockEntity) {
+            com.example.mobilecellnetwork.data.NetworkSavedData.get(serverLevel.getServer().overworld())
+                    .unregisterAntenna(serverLevel.dimension().location(), position);
         }
         if (!state.is(newState.getBlock()) && level instanceof net.minecraft.server.level.ServerLevel serverLevel
                 && level.getBlockEntity(position) instanceof ServerBlockEntity) {

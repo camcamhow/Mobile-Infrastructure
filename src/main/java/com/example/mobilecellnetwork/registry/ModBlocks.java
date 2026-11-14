@@ -3,13 +3,17 @@ package com.example.mobilecellnetwork.registry;
 import com.example.mobilecellnetwork.MobileCellNetwork;
 import com.example.mobilecellnetwork.block.EmergencyDispatchBlock;
 import com.example.mobilecellnetwork.block.NetworkBlock;
+import com.example.mobilecellnetwork.block.TestTowerBlock;
+import com.example.mobilecellnetwork.block.TestTowerSectionBlock;
+import com.example.mobilecellnetwork.block.PhoneChargerBlock;
+import com.example.mobilecellnetwork.block.SignalBoosterBlock;
 import com.example.mobilecellnetwork.blockentity.AtmBlockEntity;
 import com.example.mobilecellnetwork.blockentity.CopperAntennaBlockEntity;
 import com.example.mobilecellnetwork.blockentity.DiamondAntennaBlockEntity;
 import com.example.mobilecellnetwork.blockentity.IronAntennaBlockEntity;
-import com.example.mobilecellnetwork.blockentity.PhoneChargerBlockEntity;
 import com.example.mobilecellnetwork.blockentity.ServerBlockEntity;
 import com.example.mobilecellnetwork.blockentity.ShopTerminalBlockEntity;
+import com.example.mobilecellnetwork.blockentity.TestAntennaBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.Block;
@@ -32,11 +36,23 @@ public final class ModBlocks {
             "diamond_antenna",
             () -> new NetworkBlock(antennaProperties(4.0F), DiamondAntennaBlockEntity::new)
     );
+    public static final DeferredHolder<Block, NetworkBlock> TEST_ANTENNA = BLOCKS.register(
+            "test_antenna",
+            () -> new TestTowerBlock(antennaProperties(3.0F).noOcclusion())
+    );
+    public static final DeferredHolder<Block, TestTowerSectionBlock> TEST_TOWER_SECTION = BLOCKS.register(
+            "test_tower_section",
+            () -> new TestTowerSectionBlock(antennaProperties(3.0F).noOcclusion().noLootTable()
+                    .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK))
+    );
     public static final DeferredHolder<Block, NetworkBlock> SERVER_BLOCK = BLOCKS.register(
             "server_block",
-            () -> new NetworkBlock(BlockBehaviour.Properties.of().strength(4.0F).sound(SoundType.METAL),
+            () -> new NetworkBlock(BlockBehaviour.Properties.of().strength(4.0F).sound(SoundType.METAL).noOcclusion(),
                     ServerBlockEntity::new)
     );
+    public static final DeferredHolder<Block, NetworkBlock> SIGNAL_BOOSTER = BLOCKS.register(
+            "signal_booster", () -> new SignalBoosterBlock(
+                    BlockBehaviour.Properties.of().strength(2.0F).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredHolder<Block, NetworkBlock> ATM_BLOCK = BLOCKS.register(
             "atm_block",
             () -> new NetworkBlock(BlockBehaviour.Properties.of().strength(3.5F).sound(SoundType.METAL),
@@ -49,8 +65,8 @@ public final class ModBlocks {
     );
     public static final DeferredHolder<Block, NetworkBlock> PHONE_CHARGER = BLOCKS.register(
             "phone_charger",
-            () -> new NetworkBlock(BlockBehaviour.Properties.of().strength(3.0F).sound(SoundType.METAL),
-                    PhoneChargerBlockEntity::new)
+            () -> new PhoneChargerBlock(BlockBehaviour.Properties.of().strength(3.0F)
+                    .sound(SoundType.METAL).noOcclusion())
     );
     public static final DeferredHolder<Block, EmergencyDispatchBlock> EMERGENCY_DISPATCH = BLOCKS.register(
             "emergency_dispatch",

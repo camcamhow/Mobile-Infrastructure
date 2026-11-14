@@ -3,7 +3,6 @@ package com.example.mobilecellnetwork.gui;
 import com.example.mobilecellnetwork.data.Chat;
 import com.example.mobilecellnetwork.data.ChatType;
 import com.example.mobilecellnetwork.data.EmergencyMessages;
-import com.example.mobilecellnetwork.data.EmergencyMessages;
 import com.example.mobilecellnetwork.data.Message;
 import com.example.mobilecellnetwork.network.ChatActionPacket;
 import com.example.mobilecellnetwork.network.ClientChatCache;
@@ -12,6 +11,7 @@ import com.example.mobilecellnetwork.network.MarkChatReadPacket;
 import com.example.mobilecellnetwork.network.RequestPhoneDataPacket;
 import com.example.mobilecellnetwork.network.SmsSendPacket;
 import com.example.mobilecellnetwork.network.packet.EmergencyMessagePacket;
+import com.example.mobilecellnetwork.gui.theme.McnPrimitives;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -30,10 +31,18 @@ import com.example.mobilecellnetwork.gui.NoServiceOverlay;
 public final class SmsScreen extends Screen implements PhoneNavigableScreen {
     private static final UUID GLOBAL_ID = new UUID(0L, 0L);
     private static final UUID EMERGENCY_ID = EmergencyMessages.CHAT_ID;
+    private static final int IOS_LIST_TOP = 92;
+    private static final int IOS_ROW_PITCH = 51;
+    private static final int IOS_ROWS = 4;
     private final PhoneMenu menu;
     private final String requestedRecipient;
     private final String requestedGroupName;
     private EditBox compose;
+    private EditBox inboxSearch;
+    private String inboxQuery = "";
+    private boolean inboxSearchActive;
+    private boolean editInbox;
+    private boolean unreadOnly;
     private UUID selectedChatId;
     private int scrollOffset;
     private UUID contextChatId;
@@ -86,6 +95,17 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
             compose = PhoneTextField.create(font, screenX + 12, screenY + 326,
                     136, 20, "Message", 500, ClientPhoneCache.phoneStyle());
             addRenderableWidget(compose);
+        } else if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+            int screenX = PhoneFrame.getScreenX(this);
+            int screenY = PhoneFrame.getScreenY(this);
+            inboxSearch = PhoneTextField.create(font, screenX + 10, screenY + 315,
+                    139, 28, "Search", 64, PhoneStyle.IOS);
+            inboxSearch.setValue(inboxQuery);
+            inboxSearch.setResponder(value -> {
+                inboxQuery = value;
+                scrollOffset = 0;
+            });
+            addRenderableWidget(inboxSearch);
         }
     }
 
@@ -94,8 +114,10 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
         boolean hasPlan = !ClientPhoneCache.planId().isBlank();
         boolean emergencySelected = EMERGENCY_ID.equals(selectedChatId);
         if (!hasPlan && selectedChatId != null && !emergencySelected) {
+            PhoneFrame.render(graphics, this);
             NoServiceOverlay.render(graphics, ClientPhoneCache.phoneStyle(), PhoneFrame.getScreenX(this),
-                    PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH(), "SMS", font);
+                    PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24, "SMS", font);
+            PhoneFrame.renderStatusBar(graphics, this);
             return;
         }
         PhoneFrame.render(graphics, this);
@@ -128,10 +150,15 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
 
     private void renderChatList(GuiGraphics graphics, int x, int y, PhoneStyle style,
                                 int mouseX, int mouseY) {
+        if (style == PhoneStyle.IOS) {
+            renderSnappleInbox(graphics, x, y);
+            return;
+        }
         PhoneFrame.renderHeader(graphics, this, "Messages", true);
         if (!ClientPhoneCache.planId().isBlank()) {
-            drawTextButton(graphics, style, x + 130, y + 38, 34, "New");
-            drawTextButton(graphics, style, x + 166, y + 38, 42, "Group");
+            boolean android = style == PhoneStyle.SAMSUNG_ONE_UI;
+            drawTextButton(graphics, style, x + (android ? 126 : 130), y + 38, android ? 30 : 34, "New");
+            drawTextButton(graphics, style, x + (android ? 159 : 166), y + 38, android ? 40 : 42, "Group");
         }
         List<Chat> chats = visibleChats();
         int first = Math.clamp(scrollOffset, 0, Math.max(0, chats.size() - 5));
@@ -139,13 +166,25 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
         for (int i = first; i < Math.min(chats.size(), first + 5); i++) {
             Chat chat = chats.get(i);
             int currentY = rowY + (i - first) * 52;
-            PhoneRenderer.drawCard(graphics, style, x + 8, currentY, 188, 46);
-            String title = fit(chat.displayName(), 94);
+            boolean android = style == PhoneStyle.SAMSUNG_ONE_UI;
+            if (android) {
+                int avatarWidth = PhoneFrame.circularElementWidth(32);
+                McnPrimitives.fillRoundedRect(graphics, x + 27 - avatarWidth / 2, currentY + 6,
+                        avatarWidth, 32, 16, PhoneColors.bgTertiary(style));
+                String initial = chat.displayName().isBlank() ? "?"
+                        : chat.displayName().substring(0, 1).toUpperCase(Locale.ROOT);
+                graphics.drawString(font, initial, x + 27 - font.width(initial) / 2, currentY + 17,
+                        PhoneColors.accent(style), false);
+                graphics.fill(x + 50, currentY + 48, x + 194, currentY + 49, PhoneColors.divider(style));
+            } else {
+                PhoneRenderer.drawCard(graphics, style, x + 8, currentY, 188, 46);
+            }
+            String title = fit(chat.displayName(), android ? 92 : 94);
             String preview = latestPreview(chat);
-            graphics.drawString(font, title, x + 14, currentY + 5,
-                    PhoneColors.textPrimary(style), true);
-            graphics.drawString(font, fit(preview, 110), x + 14, currentY + 20,
-                    PhoneColors.textSecondary(style), true);
+            graphics.drawString(font, title, x + (android ? 50 : 14), currentY + 5,
+                    PhoneColors.textPrimary(style), !android);
+            graphics.drawString(font, fit(preview, android ? 120 : 110), x + (android ? 50 : 14), currentY + 23,
+                    PhoneColors.textSecondary(style), !android);
             String time = relativeTime(chat.latestTimestamp());
             graphics.drawString(font, time, x + 190 - font.width(time),
                     currentY + 5, PhoneColors.textSecondary(style), true);
@@ -163,6 +202,67 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
         }
     }
 
+    private void renderSnappleInbox(GuiGraphics graphics, int x, int y) {
+            PhoneStyle style = PhoneStyle.IOS;
+            McnPrimitives.fillRoundedRect(graphics, x, y, PhoneFrame.getScreenW(), PhoneFrame.getScreenH(),
+                    14, PhoneColors.bgPrimary(style));
+            McnPrimitives.drawPhoneCamera(graphics, style, x, y, PhoneFrame.getScreenW());
+            SnappleAppLayout.pill(graphics, font, x + 10, y + 31, 40, 22,
+                    editInbox ? "Done" : "Edit", PhoneColors.bgSecondary(style), PhoneColors.textPrimary(style));
+            SnappleAppLayout.pill(graphics, font, x + 143, y + 31, 51, 22,
+                    unreadOnly ? "Unread" : "All", PhoneColors.bgSecondary(style), PhoneColors.accent(style));
+            graphics.pose().pushPose();
+            graphics.pose().translate(x + 10, y + 62, 0);
+            graphics.pose().scale(1.6F, 1.6F, 1);
+            SnappleText.draw(graphics, font, "Messages", 0, 0, PhoneColors.textPrimary(style));
+            graphics.pose().popPose();
+
+            List<Chat> chats = inboxChats();
+            int first = Math.clamp(scrollOffset, 0, Math.max(0, chats.size() - IOS_ROWS));
+            for (int i = first; i < Math.min(chats.size(), first + IOS_ROWS); i++) {
+                Chat chat = chats.get(i);
+                int rowY = y + IOS_LIST_TOP + (i - first) * IOS_ROW_PITCH;
+                if (chat.unreadCount() > 0) {
+                    McnPrimitives.fillRoundedRect(graphics, x + 5, rowY + 18, 5, 5, 2, PhoneColors.accent(style));
+                }
+                SnappleAppLayout.avatar(graphics, font, x + 27, rowY + 7, 27, chat.displayName());
+                String time = relativeTime(chat.latestTimestamp());
+                int timeWidth = font.width(SnappleText.text(time));
+                int titleWidth = Math.max(0, 136 - timeWidth - 5);
+                SnappleText.draw(graphics, font, fit(chat.displayName(), titleWidth), x + 50, rowY + 4,
+                        PhoneColors.textPrimary(style));
+                SnappleText.draw(graphics, font, time, x + 190 - timeWidth, rowY + 4, PhoneColors.textSecondary(style));
+                SnappleText.draw(graphics, font, fit(latestPreview(chat), 140), x + 50, rowY + 19,
+                        PhoneColors.textSecondary(style));
+                if (editInbox && chat.type() != ChatType.GLOBAL && chat.type() != ChatType.EMERGENCY) {
+                    SnappleText.draw(graphics, font, "Options", x + 50, rowY + 32, PhoneColors.accent(style));
+                }
+                SnappleAppLayout.separator(graphics, x + 50, rowY + 48, 144);
+            }
+            if (chats.isEmpty()) {
+                SnappleText.centered(graphics, font, inboxQuery.isBlank()
+                                ? (unreadOnly ? "No unread messages" : "No conversations")
+                                : "No matching conversations",
+                        x + 102, y + 175, PhoneColors.textSecondary(style));
+            }
+            PhoneTextField.renderBackground(graphics, style, x + 10, y + 315, 139, 28);
+            if (!ClientPhoneCache.planId().isBlank()) {
+                SnappleAppLayout.pill(graphics, font, x + 153, y + 315, 41, 28, "New",
+                        PhoneColors.bgSecondary(style), PhoneColors.accent(style));
+                SnappleAppLayout.pill(graphics, font, x + 87, y + 31, 50, 22, "Group",
+                        PhoneColors.bgSecondary(style), PhoneColors.accent(style));
+            }
+        }
+
+        private List<Chat> inboxChats() {
+            String query = inboxQuery.strip().toLowerCase(Locale.ROOT);
+            return visibleChats().stream().filter(chat -> !unreadOnly || chat.unreadCount() > 0)
+                    .filter(chat -> chat.displayName().toLowerCase(Locale.ROOT).contains(query)
+                            || chat.memberNumbers().stream().anyMatch(number -> number.contains(query))
+                            || chat.messages().stream().anyMatch(message ->
+                                    message.body().toLowerCase(Locale.ROOT).contains(query)))
+                    .toList();
+        }
     private void renderConversation(GuiGraphics graphics, int x, int y, PhoneStyle style,
                                     int mouseX, int mouseY) {
         Chat chat = selectedChat();
@@ -288,10 +388,10 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
             result.add(ClientChatCache.globalChat());
         }
         result.sort((left, right) -> {
-            if (left.type() == ChatType.EMERGENCY) return -1;
-            if (right.type() == ChatType.EMERGENCY) return 1;
-            if (left.type() == ChatType.GLOBAL) return -1;
-            if (right.type() == ChatType.GLOBAL) return 1;
+            int leftPriority = left.type() == ChatType.EMERGENCY ? 0 : left.type() == ChatType.GLOBAL ? 1 : 2;
+            int rightPriority = right.type() == ChatType.EMERGENCY ? 0 : right.type() == ChatType.GLOBAL ? 1 : 2;
+            int priority = Integer.compare(leftPriority, rightPriority);
+            if (priority != 0) return priority;
             if (left.pinnedToTop() != right.pinnedToTop()) {
                 return left.pinnedToTop() ? -1 : 1;
             }
@@ -312,10 +412,11 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
         selectedChatId = chat.id();
         scrollOffset = 0;
         contextChatId = null;
-        if (compose == null) {
-            clearWidgets();
-            init();
-        }
+        compose = null;
+        inboxSearch = null;
+        inboxSearchActive = false;
+        clearWidgets();
+        init();
         if (!GLOBAL_ID.equals(chat.id())) {
             PacketDistributor.sendToServer(new MarkChatReadPacket(chat.id()));
         }
@@ -364,6 +465,7 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
     }
 
     private String fit(String text, int width) {
+        if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) return SnappleAppLayout.fit(font, text, width);
         if (font.width(text) <= width) return text;
         return font.plainSubstrByWidth(text, Math.max(0, width - font.width("..."))) + "...";
     }
@@ -381,8 +483,9 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
         if (contextChatId != null) {
             Chat chat = ClientChatCache.get(contextChatId);
             int menuY = y + 162;
-            if (chat != null && xMouse >= x + 46 && xMouse < x + 170
-                    && yMouse >= menuY && yMouse < menuY + 80) {
+            int optionCount = chat != null && chat.type() == ChatType.GROUP ? 3 : 1;
+            if (button == 0 && chat != null && xMouse >= x + 46 && xMouse < x + 170
+                    && yMouse >= menuY + 4 && yMouse < menuY + 4 + optionCount * 24) {
                 int item = (int) ((yMouse - menuY - 4) / 24);
                 if (chat.type() == ChatType.GROUP && item == 0) {
                     minecraft.setScreen(new RenameChatModalScreen(menu, chat));
@@ -395,15 +498,22 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
                 return true;
             }
             contextChatId = null;
+            return true;
         }
         if (selectedChatId == null) {
+            if (ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
+                return clickSnappleInbox(xMouse, yMouse, x, y, button);
+            }
+            boolean android = ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI;
             if (!ClientPhoneCache.planId().isBlank()
-                    && button == 0 && inside(xMouse, yMouse, x + 128, y + 34, 40, 28)) {
+                    && button == 0 && inside(xMouse, yMouse, x + (android ? 126 : 128), y + 34,
+                            android ? 30 : 40, 28)) {
                 minecraft.setScreen(new NewMessageModalScreen(menu));
                 return true;
             }
             if (!ClientPhoneCache.planId().isBlank()
-                    && button == 0 && inside(xMouse, yMouse, x + 164, y + 34, 48, 28)) {
+                    && button == 0 && inside(xMouse, yMouse, x + (android ? 159 : 164), y + 34,
+                            android ? 40 : 48, 28)) {
                 minecraft.setScreen(new NewGroupChatModalScreen(menu));
                 return true;
             }
@@ -440,12 +550,68 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
         return super.mouseClicked(xMouse, yMouse, button);
     }
 
+    private boolean clickSnappleInbox(double mouseX, double mouseY, int x, int y, int button) {
+        if (button == 0) {
+            if (inside(mouseX, mouseY, x + 10, y + 31, 40, 22)) {
+                editInbox = !editInbox;
+                return true;
+            }
+            if (inside(mouseX, mouseY, x + 143, y + 31, 51, 22)) {
+                unreadOnly = !unreadOnly;
+                scrollOffset = 0;
+                return true;
+            }
+            if (!ClientPhoneCache.planId().isBlank()) {
+                if (inside(mouseX, mouseY, x + 153, y + 315, 41, 28)) {
+                    minecraft.setScreen(new NewMessageModalScreen(menu));
+                    return true;
+                }
+                if (inside(mouseX, mouseY, x + 87, y + 31, 50, 22)) {
+                    minecraft.setScreen(new NewGroupChatModalScreen(menu));
+                    return true;
+                }
+            }
+            if (inside(mouseX, mouseY, x + 10, y + 315, 139, 28) && inboxSearch != null) {
+                inboxSearchActive = true;
+                inboxSearch.setFocused(true);
+                setFocused(inboxSearch);
+                return super.mouseClicked(mouseX, mouseY, button);
+            }
+        }
+        List<Chat> chats = inboxChats();
+        int first = Math.clamp(scrollOffset, 0, Math.max(0, chats.size() - IOS_ROWS));
+        if (inside(mouseX, mouseY, x + 4, y + IOS_LIST_TOP, 192, IOS_ROWS * IOS_ROW_PITCH)) {
+            int row = (int) ((mouseY - y - IOS_LIST_TOP) / IOS_ROW_PITCH);
+            int index = first + row;
+            if (index < chats.size()) {
+                Chat chat = chats.get(index);
+                boolean canManage = chat.type() != ChatType.GLOBAL && chat.type() != ChatType.EMERGENCY;
+                if (button == 1 || (button == 0 && editInbox)) {
+                    if (canManage) {
+                        contextChatId = chat.id();
+                        if (inboxSearch != null) {
+                            inboxSearch.setFocused(false);
+                            setFocused(null);
+                        }
+                    }
+                } else if (button == 0) {
+                    openChat(chat);
+                }
+                return true;
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY != 0) {
             if (selectedChatId == null) {
+                int size = ClientPhoneCache.phoneStyle() == PhoneStyle.IOS
+                        ? inboxChats().size() : visibleChats().size();
+                int visible = ClientPhoneCache.phoneStyle() == PhoneStyle.IOS ? IOS_ROWS : 5;
                 scrollOffset = Math.clamp(scrollOffset + (scrollY < 0 ? 1 : -1),
-                        0, Math.max(0, visibleChats().size() - 5));
+                        0, Math.max(0, size - visible));
             } else {
                 Chat chat = selectedChat();
                 if (chat != null) {
@@ -471,6 +637,15 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
             init();
             return true;
         }
+        if (selectedChatId == null && inboxSearchActive && keyCode == 256) {
+            inboxSearchActive = false;
+            if (inboxSearch != null) {
+                inboxSearch.setValue("");
+                inboxSearch.setFocused(false);
+                setFocused(null);
+            }
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -481,6 +656,13 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
             contextChatId = null;
             clearWidgets();
             init();
+        } else if (inboxSearchActive) {
+            inboxSearchActive = false;
+            if (inboxSearch != null) {
+                inboxSearch.setValue("");
+                inboxSearch.setFocused(false);
+                setFocused(null);
+            }
         } else {
             PhoneNavigation.openHome(this);
         }
@@ -497,6 +679,19 @@ public final class SmsScreen extends Screen implements PhoneNavigableScreen {
 
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        return super.mouseReleased(PhoneFrame.layoutMouseX(this, mouseX),
+                PhoneFrame.layoutMouseY(this, mouseY), button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return super.mouseDragged(PhoneFrame.layoutMouseX(this, mouseX),
+                PhoneFrame.layoutMouseY(this, mouseY), button,
+                PhoneFrame.layoutMouseDeltaX(this, dragX), PhoneFrame.layoutMouseDeltaY(this, dragY));
     }
 
     @Override

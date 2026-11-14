@@ -45,7 +45,8 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
     }
 
     private boolean fresh() {
-        return ClientCallCache.state() != null && ClientCallCache.updatedAtMillis() >= openedAtMillis - 50L;
+        return ClientCallCache.state() != null && (ClientCallCache.state() == CallSession.State.ACTIVE
+                || ClientCallCache.updatedAtMillis() >= openedAtMillis - 50L);
     }
 
     private CallSession.State state() {
@@ -156,8 +157,10 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             // No service gating: show overlay if no active plan and screen is not exempt
             if (ClientPhoneCache.planId().isBlank()) {
+                PhoneFrame.render(graphics, this);
                 NoServiceOverlay.render(graphics, ClientPhoneCache.phoneStyle(), PhoneFrame.getScreenX(this),
-                        PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH(), "Call", font);
+                        PhoneFrame.getContentTop(this), PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24, "Call", font);
+                PhoneFrame.renderStatusBar(graphics, this);
                 return;
             }
             PhoneFrame.render(graphics, this);
@@ -167,13 +170,20 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
         int centerX = left + PhoneFrame.getScreenW() / 2;
         PhoneFrame.renderPanel(graphics, left, top, PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24);
 
-        PhoneRenderer.fillRoundedRect(graphics, style, centerX - 28, top + 44, 56, 56, 28,
-                PhoneColors.accent(style));
-        String initial = title().isEmpty() ? "?" : title().substring(0, 1).toUpperCase(java.util.Locale.ROOT);
-        graphics.drawCenteredString(font, initial, centerX, top + 68, 0xFFFFFFFF);
+        CallSession.State state = state();
+        if (state == CallSession.State.ACTIVE) {
+            graphics.fill(left + 14, top + 20, left + 190, top + 102, 0xFF17191D);
+            VideoCallClient.drawRemote(graphics, left + 14, top + 20, 176, 82);
+            PhoneRenderer.drawSecondaryButton(graphics, style, left + 38, top + 153, 128, 22,
+                    VideoCallClient.enabled() ? "Camera off" : "Camera on", font);
+        } else {
+            PhoneRenderer.fillRoundedRect(graphics, style, centerX - 28, top + 44, 56, 56, 28,
+                    PhoneColors.accent(style));
+            String initial = title().isEmpty() ? "?" : title().substring(0, 1).toUpperCase(java.util.Locale.ROOT);
+            graphics.drawCenteredString(font, initial, centerX, top + 68, 0xFFFFFFFF);
+        }
         graphics.drawCenteredString(font, font.plainSubstrByWidth(title(), 180), centerX, top + 110,
                 PhoneColors.textPrimary(style));
-        CallSession.State state = state();
         boolean error = state == CallSession.State.ENDED && !voicemailSent;
         String status = status();
         int statusColor = error ? PhoneColors.error(style) : PhoneColors.textSecondary(style);
@@ -254,6 +264,10 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
                     return true;
                 }
             } else {
+                if (state == CallSession.State.ACTIVE && inside(x, y, left + 38, top + 153, 128, 22)) {
+                    VideoCallClient.toggle();
+                    return true;
+                }
                 int by = top + 200;
                 if (inside(x, y, left + 18, by, BUTTON_SIZE, BUTTON_SIZE)) {
                     if (state == CallSession.State.ACTIVE) {
@@ -282,6 +296,12 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         return super.mouseReleased(PhoneFrame.layoutMouseX(this, mouseX),
                 PhoneFrame.layoutMouseY(this, mouseY), button);
+    }
+
+    @Override
+    public void removed() {
+        VideoCallClient.stopForScreen();
+        super.removed();
     }
 
     @Override

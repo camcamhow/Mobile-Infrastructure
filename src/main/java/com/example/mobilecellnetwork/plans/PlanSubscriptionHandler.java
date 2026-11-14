@@ -46,6 +46,8 @@ public final class PlanSubscriptionHandler {
         usage.setCycleStartDay(day);
         usage.setCycleActive(true);
         player.getData(ModCapabilities.PHONE_DATA).setLastKnownPlanId(plan.id());
+        player.getData(ModCapabilities.PHONE_DATA).setHomeNetworkId(plan.carrierNetworkId());
+        com.example.mobilecellnetwork.network.PhoneDeviceService.saveActiveProfile(player);
         NetworkSavedData.get(player.server.overworld()).setPlanAssignment(player.getUUID(), plan.id());
         NetworkHandler.syncPlanData(player);
         NetworkHandler.syncPhoneData(player);
@@ -63,6 +65,8 @@ public final class PlanSubscriptionHandler {
         usage.setPlanCanceled(true);
         usage.setCycleActive(false);
         player.getData(ModCapabilities.PHONE_DATA).setLastKnownPlanId("");
+        player.getData(ModCapabilities.PHONE_DATA).setHomeNetworkId("");
+        com.example.mobilecellnetwork.network.PhoneDeviceService.saveActiveProfile(player);
         NetworkSavedData.get(player.server.overworld()).clearPlanAssignment(player.getUUID());
         com.example.mobilecellnetwork.voice.CallManager.hangUp(player.getUUID());
         NetworkHandler.syncPlanData(player);

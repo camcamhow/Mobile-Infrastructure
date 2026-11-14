@@ -27,8 +27,27 @@ public final class PhoneNavigation {
         int backX = centerX - BUTTON_GAP / 2 - BUTTON_WIDTH;
         int homeX = centerX + BUTTON_GAP / 2;
         PhoneStyle style = com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle();
-        drawButton(graphics, style, backX, y, "‹", false);
-        drawButton(graphics, style, homeX, y, "", true);
+        if (style == PhoneStyle.IOS) {
+            int color = screen instanceof PhoneScreen || screen instanceof ControlCenterScreen
+                    ? 0xFFFFFFFF : PhoneColors.textPrimary(style);
+            int bottom = screenY + PhoneFrame.getScreenH();
+            McnPrimitives.fillRoundedRect(graphics, centerX - 28, bottom - 9, 56, 4, 2, color);
+            graphics.drawString(Minecraft.getInstance().font, "<", screenX + 13, bottom - 17, color, false);
+            return;
+        }
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            int color = screen instanceof PhoneScreen || screen instanceof ControlCenterScreen
+                    ? 0xFFFFFFFF : PhoneColors.textPrimary(style);
+            int bottom = screenY + PhoneFrame.getScreenH();
+            McnPrimitives.fillRoundedRect(graphics, centerX - 25, bottom - 9, 50, 3, 2, color);
+            graphics.drawString(Minecraft.getInstance().font, "<", screenX + 14, bottom - 17, color, false);
+            return;
+        }
+        int color = screen instanceof PhoneScreen ? 0xFFFFFFFF : PhoneColors.textPrimary(style);
+        graphics.drawCenteredString(Minecraft.getInstance().font, "<",
+                backX + BUTTON_WIDTH / 2, y + 6, color);
+        McnPrimitives.fillRoundedRect(graphics, homeX + 2, y + 9,
+                BUTTON_WIDTH - 4, 3, 1, color);
     }
 
     public static void onMouseButton(InputEvent.MouseButton.Pre event) {
@@ -36,6 +55,9 @@ public final class PhoneNavigation {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof LockScreen || minecraft.screen instanceof PhoneSetupScreen) {
+            return;
+        }
         if (!(minecraft.screen instanceof PhoneNavigableScreen phoneScreen)) {
             return;
         }
@@ -50,6 +72,20 @@ public final class PhoneNavigation {
         int y = PhoneFrame.getScreenY(screen) + PhoneFrame.getScreenH() - BUTTON_HEIGHT - 4;
         int backX = centerX - BUTTON_GAP / 2 - BUTTON_WIDTH;
         int homeX = centerX + BUTTON_GAP / 2;
+        PhoneStyle style = com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle();
+        if (style == PhoneStyle.IOS || style == PhoneStyle.SAMSUNG_ONE_UI) {
+            int screenX = PhoneFrame.getScreenX(screen);
+            int bottom = PhoneFrame.getScreenY(screen) + PhoneFrame.getScreenH();
+            if (layoutY >= bottom - 23 && layoutY < bottom && layoutX >= screenX + 5 && layoutX < screenX + 39) {
+                phoneScreen.navigateBack();
+                event.setCanceled(true);
+            } else if (layoutY >= bottom - 23 && layoutY < bottom
+                    && layoutX >= centerX - 34 && layoutX < centerX + 34) {
+                phoneScreen.navigateHome();
+                event.setCanceled(true);
+            }
+            return;
+        }
         if (contains(layoutX, layoutY, backX, y)) {
             phoneScreen.navigateBack();
             event.setCanceled(true);

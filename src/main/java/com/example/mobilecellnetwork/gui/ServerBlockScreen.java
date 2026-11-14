@@ -8,6 +8,7 @@ import com.example.mobilecellnetwork.gui.admin.AdminUndoManager;
 import com.example.mobilecellnetwork.network.ClientPhoneCache;
 import com.example.mobilecellnetwork.network.ClientServerAdminCache;
 import com.example.mobilecellnetwork.network.ServerAdminDataPacket;
+import com.example.mobilecellnetwork.network.ServerAdminActionPacket;
 import com.example.mobilecellnetwork.network.ServerAdminRequestPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -53,7 +54,14 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
     }
 
     private record NetworkEntry(String id, String name, int towerCount, String ownerName,
-                                String serverState, boolean passwordSet) {
+                                String serverState, boolean passwordSet, boolean roaming) {
+    }
+
+    private record PlanEntry(EditPlanModal.PlanData data) {
+    }
+
+    private record RoamingEntry(String id, String name, boolean allowed, long minute, long text,
+                                long data, boolean automatic) {
     }
 
     private final ServerMenu menu;
@@ -101,6 +109,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
     private int listBottom;
     private int listHeight;
     private int maxScrollOffset;
+    private int refreshTicks;
     private final Set<Integer> selectedAntennaIndices = new HashSet<>();
     private boolean searchFocused = false;
     private int searchCursorPos = 0;
@@ -126,6 +135,15 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
     public void removed() {
         NeoForge.EVENT_BUS.unregister(this);
         super.removed();
+    }
+
+    @Override
+    protected void containerTick() {
+        super.containerTick();
+        if (++refreshTicks >= 40) {
+            refreshTicks = 0;
+            requestCurrentTabData();
+        }
     }
 
     private void requestCurrentTabData() {
@@ -219,6 +237,10 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
             int itemCount = getFilteredNetworkCount();
             totalListHeight = Math.max(0,
                     itemCount * AdminTheme.ROW_HEIGHT_LARGE + (Math.max(0, itemCount - 1)) * AdminTheme.SPACE_XS - listHeight);
+        } else if (activeTab == ServerTab.ROAMING) {
+            int itemCount = getRoamingEntries().size();
+            totalListHeight = Math.max(0,
+                    itemCount * (AdminTheme.ROW_HEIGHT_LARGE + AdminTheme.SPACE_XS) + 24 - listHeight);
         } else if (activeTab == ServerTab.ANTENNAS) {
             int itemCount = getFilteredAntennaCount();
             totalListHeight = Math.max(0,
@@ -230,7 +252,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         } else if (activeTab == ServerTab.PLANS) {
             int itemCount = getPlanCount();
             totalListHeight = Math.max(0,
-                    itemCount * AdminTheme.ROW_HEIGHT_LARGE + (Math.max(0, itemCount - 1)) * AdminTheme.SPACE_XS - listHeight);
+                    itemCount * AdminTheme.ROW_HEIGHT_LARGE + (Math.max(0, itemCount - 1)) * AdminTheme.SPACE_XS + 20 - listHeight);
         }
                 this.maxScrollOffset = Math.max(0, totalListHeight);
 
@@ -241,7 +263,8 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
 
         // Draw header
         AdminPrimitives.drawHeader(graphics, panelX, panelY, panelW, AdminTheme.HEADER_HEIGHT);
-        drawLeftAlignedText(graphics, this.font, "Server Block", panelX + AdminTheme.SPACE_L, panelY,
+        graphics.fill(panelX + 1, panelY + 1, panelX + panelW - 1, panelY + 3, AdminColors.ACCENT);
+        drawLeftAlignedText(graphics, this.font, "NETWORK CONTROL", panelX + AdminTheme.SPACE_L, panelY,
                 AdminTheme.TEXT_TITLE, AdminColors.TEXT_PRIMARY, AdminTheme.HEADER_HEIGHT);
 
         // Close button
@@ -249,6 +272,12 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         int closeBtnH = AdminTheme.BUTTON_HEIGHT_SM;
         int closeBtnX = panelX + panelW - AdminTheme.SPACE_L - closeBtnW;
         int closeBtnY = panelY + (AdminTheme.HEADER_HEIGHT - closeBtnH) / 2;
+        String powerLabel = menu.powerData(2) != 0 ? "Power bypass" : menu.powerData(0) + " / 10000 FE";
+        int powerX = closeBtnX - font.width(powerLabel) - 12;
+        if (powerX > panelX + 160) {
+            graphics.drawString(font, powerLabel, powerX, panelY + (AdminTheme.HEADER_HEIGHT - font.lineHeight) / 2,
+                    menu.powerData(1) != 0 ? 0xFF8FE3A4 : 0xFFFF8888, false);
+        }
         AdminPrimitives.drawButton(graphics, this.font, closeBtnX, closeBtnY, closeBtnW, closeBtnH,
                 "Close", AdminPrimitives.ButtonVariant.SECONDARY, false, false);
 
@@ -291,34 +320,20 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         // Render active tab content
         if (activeTab == ServerTab.NETWORKS) {
             renderNetworksTab(graphics, mouseX, mouseY);
-        } else if (activeTab == ServerTab.ANTENNAS) {
-            renderAntennaTab(graphics, mouseX, mouseY);
         } else if (activeTab == ServerTab.ROAMING) {
-            renderRoamingTab(graphics, mouseX, mouseY);
-        } else if (activeTab == ServerTab.PLAYERS) {
-            renderPlayersTab(graphics, mouseX, mouseY);
+            renderOwnedRoaming(graphics, mouseX, mouseY);
         } else if (activeTab == ServerTab.PLANS) {
             renderPlansTab(graphics, mouseX, mouseY);
-        } else if (activeTab == ServerTab.BILLING) {
-            renderBillingTab(graphics, mouseX, mouseY);
+        } else {
+            renderUnavailableTab(graphics);
         }
 
         // Draw footer
         AdminPrimitives.drawFooter(graphics, panelX, footerY, panelW, AdminTheme.FOOTER_HEIGHT);
 
-                // Footer left: Revenue/Version info (vertically stacked at far left)
-                                String revenueText = "Revenue: $0";
-                                String versionText = "Version 1.0.0";
-                                int leftX = panelX + AdminTheme.SPACE_S;
-                                // Raise text up more: use smaller top margin to prevent version clipping at bottom
-                                // First line baseline: footerY + 2 (tight top margin)
-                                // Second line baseline: first baseline + line height + spacing
-                                int firstLineBaseline = footerY + 2;
-                                int secondLineBaseline = firstLineBaseline + AdminTheme.TEXT_CAPTION + AdminTheme.SPACE_XXS;
-                                drawLeftAlignedText(graphics, this.font, revenueText, panelX + AdminTheme.SPACE_S, firstLineBaseline,
-                                        AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, AdminTheme.TEXT_CAPTION);
-                                drawLeftAlignedText(graphics, this.font, versionText, panelX + AdminTheme.SPACE_S, secondLineBaseline,
-                                        AdminTheme.TEXT_CAPTION, AdminColors.TEXT_MUTED, AdminTheme.TEXT_CAPTION);
+                drawLeftAlignedText(graphics, this.font, "Mobile Cell Network  |  " + tabLabels[activeTab.ordinal()],
+                        panelX + AdminTheme.SPACE_M, footerY, AdminTheme.TEXT_CAPTION,
+                        AdminColors.TEXT_SECONDARY, AdminTheme.FOOTER_HEIGHT);
 
                 // Footer buttons - Refresh on the right
                 int refreshBtnW = 80;
@@ -328,16 +343,9 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                 AdminPrimitives.drawButton(graphics, this.font, refreshBtnX, refreshBtnY, refreshBtnW, newBtnH,
                         "Refresh", AdminPrimitives.ButtonVariant.SECONDARY, false, false);
 
-                // Page indicator - centered in footer
-                String pageText = "Page 1 of 1";
-                int pageTextW = this.font.width(pageText);
-                int pageX = panelX + (panelW - pageTextW) / 2;
-                int pageY = footerY + (AdminTheme.FOOTER_HEIGHT - AdminTheme.TEXT_CAPTION) / 2;
-                drawCenteredText(graphics, this.font, pageText, pageX, pageY, pageTextW, AdminTheme.FOOTER_HEIGHT,
-                        AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, true);
-
         // Draw scrollbar for list
-        if ((activeTab == ServerTab.NETWORKS || activeTab == ServerTab.ANTENNAS) && maxScrollOffset > 0) {
+        if ((activeTab == ServerTab.NETWORKS || activeTab == ServerTab.ROAMING || activeTab == ServerTab.ANTENNAS
+                || activeTab == ServerTab.PLANS) && maxScrollOffset > 0) {
             int scrollbarX = contentAreaLeft + contentAreaWidth - AdminTheme.SPACE_XS - 4;
             int scrollbarY = listTop;
             int scrollbarH = listHeight;
@@ -375,6 +383,26 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         renderModal(graphics, mouseX, mouseY);
     }
 
+    private void renderUnavailableTab(GuiGraphics graphics) {
+        int cardWidth = Math.max(0, contentWidth);
+        AdminPrimitives.drawCard(graphics, contentLeft, contentTop, cardWidth, 92);
+        String title = switch (activeTab) {
+            case ANTENNAS -> "Antenna administration";
+            case ROAMING -> "Roaming administration";
+            case PLAYERS -> "Player administration";
+            case BILLING -> "Billing administration";
+            default -> "Administration";
+        };
+        drawLeftAlignedText(graphics, font, fitAdminText(title, cardWidth - 28, AdminTheme.TEXT_HEADER),
+                contentLeft + 14, contentTop + 8, AdminTheme.TEXT_HEADER, AdminColors.TEXT_PRIMARY, 22);
+        drawLeftAlignedText(graphics, font, fitAdminText("This section is not connected yet.", cardWidth - 28, AdminTheme.TEXT_CAPTION),
+                contentLeft + 14, contentTop + 36, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, 18);
+        String hint = activeTab == ServerTab.ANTENNAS
+                ? "Configure antennas at the antenna block." : "Use available server commands for this task.";
+        drawLeftAlignedText(graphics, font, fitAdminText(hint, cardWidth - 28, AdminTheme.TEXT_CAPTION),
+                contentLeft + 14, contentTop + 56, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_MUTED, 18);
+    }
+
     private void renderNetworksTab(GuiGraphics graphics, int mouseX, int mouseY) {
             // Search bar with New Network button on the right
             // Calculate space for New Network button on the right
@@ -407,12 +435,6 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                         AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, 20);
             }
 
-        String sortText = "Sort: Name";
-        int sortW = this.font.width(sortText) + AdminTheme.SPACE_L * 2;
-        int sortX = contentLeft + contentWidth - AdminTheme.SPACE_L - sortW;
-        drawLeftAlignedText(graphics, this.font, sortText, sortX, rowY,
-                AdminTheme.TEXT_CAPTION, AdminColors.TEXT_MUTED, 20);
-
         // Network list
         int cardY = listTop + AdminTheme.SPACE_L + AdminTheme.SPACE_S - scrollOffset;
         // Render empty state only when no networks exist and no modal is open
@@ -430,23 +452,34 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                             AdminTheme.TEXT_BODY, AdminColors.TEXT_MUTED, this.font.lineHeight);
                 }
 
+        graphics.enableScissor(contentLeft, listTop + 20, contentLeft + contentWidth, listBottom);
         for (NetworkEntry network : networks) {
             AdminPrimitives.drawCard(graphics, contentLeft, cardY, contentWidth, AdminTheme.ROW_HEIGHT_LARGE);
+            graphics.fill(contentLeft + 1, cardY + 7, contentLeft + 3, cardY + AdminTheme.ROW_HEIGHT_LARGE - 7,
+                    "Online".equalsIgnoreCase(network.serverState()) ? AdminColors.SUCCESS : AdminColors.TEXT_MUTED);
             int textX = contentLeft + AdminTheme.SPACE_L;
-            drawLeftAlignedText(graphics, this.font, network.name(),
+            drawLeftAlignedText(graphics, this.font, fitAdminText(network.name(), contentWidth - 100, AdminTheme.TEXT_BODY),
                     textX, cardY + 4, AdminTheme.TEXT_BODY, AdminColors.TEXT_PRIMARY,
                     AdminTheme.ROW_HEIGHT_LARGE / 2);
             drawLeftAlignedText(graphics, this.font,
-                    "Owner: " + network.ownerName() + "  |  Towers: " + network.towerCount(),
+                    fitAdminText("Owner: " + network.ownerName() + "  |  Towers: " + network.towerCount(),
+                            contentWidth - 28, AdminTheme.TEXT_CAPTION),
                     textX, cardY + 4 + AdminTheme.TEXT_BODY,
                     AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
             drawLeftAlignedText(graphics, this.font,
-                    "Server: " + network.serverState() + "  |  Password: "
-                            + (network.passwordSet() ? "Set" : "Not set"),
+                    fitAdminText("Server: " + network.serverState() + "  |  Password: "
+                            + (network.passwordSet() ? "Set" : "Not set"), contentWidth - 28, AdminTheme.TEXT_CAPTION),
                     textX, cardY + 4 + AdminTheme.TEXT_BODY * 2,
                     AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
+            int editX = contentLeft + contentWidth - 68;
+            int editY = cardY + 6;
+            AdminPrimitives.drawButton(graphics, font, editX, editY, 58, AdminTheme.BUTTON_HEIGHT_SM,
+                    "Restore".equals(network.serverState()) ? "Restore" : "Edit", AdminPrimitives.ButtonVariant.SECONDARY,
+                    mouseX >= editX && mouseX < editX + 58 && mouseY >= editY
+                            && mouseY < editY + AdminTheme.BUTTON_HEIGHT_SM, false);
             cardY += AdminTheme.ROW_HEIGHT_LARGE + AdminTheme.SPACE_XS;
         }
+        graphics.disableScissor();
     }
 
     private List<NetworkEntry> getFilteredNetworks() {
@@ -459,7 +492,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         List<NetworkEntry> networks = new ArrayList<>();
         for (String row : snapshot.entries()) {
             String[] fields = row.split("\\|", -1);
-            if (fields.length != 12 || !"network".equals(fields[0])) {
+            if (fields.length != 13 || !"network".equals(fields[0])) {
                 continue;
             }
             int towerCount;
@@ -470,7 +503,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
             }
 
             NetworkEntry network = new NetworkEntry(fields[1], fields[2], towerCount, fields[5],
-                    fields[7], Boolean.parseBoolean(fields[8]));
+                    fields[7], Boolean.parseBoolean(fields[8]), Boolean.parseBoolean(fields[12]));
             if (query.isEmpty() || network.name().toLowerCase(Locale.ROOT).contains(query)
                     || network.id().toLowerCase(Locale.ROOT).contains(query)
                     || network.ownerName().toLowerCase(Locale.ROOT).contains(query)) {
@@ -482,6 +515,53 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
 
     private int getFilteredNetworkCount() {
         return getFilteredNetworks().size();
+    }
+
+    private List<RoamingEntry> getRoamingEntries() {
+        var snapshot = ClientServerAdminCache.snapshot();
+        if (!"Roaming".equals(snapshot.tab())) return List.of();
+        List<RoamingEntry> result = new ArrayList<>();
+        for (String row : snapshot.entries()) {
+            String[] f = row.split("\\|", -1);
+            if (f.length < 8 || !"roaming".equals(f[0])) continue;
+            try {
+                result.add(new RoamingEntry(f[1], f[2], Boolean.parseBoolean(f[3]),
+                        Long.parseLong(f[4]), Long.parseLong(f[5]), Long.parseLong(f[6]),
+                        Boolean.parseBoolean(f[7])));
+            } catch (NumberFormatException exception) {
+                com.mojang.logging.LogUtils.getLogger().warn("Invalid roaming rates received for network {}", f[1]);
+            }
+        }
+        return result;
+    }
+
+    private void renderOwnedRoaming(GuiGraphics graphics, int mouseX, int mouseY) {
+        drawLeftAlignedText(graphics, font, "Roaming settings for your networks", contentLeft, contentTop,
+                AdminTheme.TEXT_BODY, AdminColors.TEXT_PRIMARY, AdminTheme.SEARCH_BAR_HEIGHT);
+        List<RoamingEntry> entries = getRoamingEntries();
+        if (entries.isEmpty()) {
+            drawLeftAlignedText(graphics, font, "No owned networks to manage.", contentLeft, listTop,
+                    AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, 22);
+            return;
+        }
+        int y = listTop + 24 - scrollOffset;
+        graphics.enableScissor(contentLeft, listTop + 20, contentLeft + contentWidth, listBottom);
+        for (RoamingEntry entry : entries) {
+            AdminPrimitives.drawCard(graphics, contentLeft, y, contentWidth, AdminTheme.ROW_HEIGHT_LARGE);
+            drawLeftAlignedText(graphics, font, fitAdminText(entry.name(), contentWidth - 100, AdminTheme.TEXT_BODY),
+                    contentLeft + 12, y + 5, AdminTheme.TEXT_BODY, AdminColors.TEXT_PRIMARY, 18);
+            String details = (entry.allowed() ? "Enabled" : "Disabled") + "  |  "
+                    + entry.minute() + "/min  " + entry.text() + "/text  " + entry.data() + "/MB";
+            drawLeftAlignedText(graphics, font, fitAdminText(details, contentWidth - 24, AdminTheme.TEXT_CAPTION),
+                    contentLeft + 12, y + 29, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, 18);
+            int bx = contentLeft + contentWidth - 78;
+            AdminPrimitives.drawButton(graphics, font, bx, y + 6, 68, AdminTheme.BUTTON_HEIGHT_SM,
+                    "Settings", AdminPrimitives.ButtonVariant.SECONDARY,
+                    mouseX >= bx && mouseX < bx + 68 && mouseY >= y + 6
+                            && mouseY < y + 6 + AdminTheme.BUTTON_HEIGHT_SM, false);
+            y += AdminTheme.ROW_HEIGHT_LARGE + AdminTheme.SPACE_XS;
+        }
+        graphics.disableScissor();
     }
 
     // === ANTENNAS TAB ===
@@ -873,7 +953,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         // Search bar
         int searchBarX = contentLeft + AdminTheme.SPACE_L;
         int searchBarY = contentTop;
-        int searchBarW = contentWidth - AdminTheme.SPACE_L * 2;
+        int searchBarW = contentWidth - AdminTheme.SPACE_L * 2 - 100;
         int searchBarH = AdminTheme.SEARCH_BAR_HEIGHT;
         boolean planSearchFocused = focusedField != null && focusedField.equals("planSearch");
         AdminPrimitives.drawSearchBar(graphics, this.font, searchBarX, searchBarY, searchBarW, searchBarH,
@@ -886,37 +966,41 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
         String planLabel = planCount + " plan" + (planCount == 1 ? "" : "s");
         drawLeftAlignedText(graphics, this.font, planLabel, contentLeft, rowY,
                 AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, 20);
+        if (ClientServerAdminCache.snapshot().entries().stream().anyMatch(row -> row.startsWith("plan_warning|"))) {
+            drawLeftAlignedText(graphics, this.font, "List limited to 199 entries",
+                    contentLeft + 100, rowY, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_MUTED, 20);
+        }
 
-        String sortText = "Sort: Price";
-        int sortW = this.font.width(sortText) + AdminTheme.SPACE_L * 2;
-        int sortX = contentLeft + contentWidth - AdminTheme.SPACE_L - sortW;
-        drawLeftAlignedText(graphics, this.font, sortText, sortX, rowY,
-                AdminTheme.TEXT_CAPTION, AdminColors.TEXT_MUTED, 20);
+        int newX = contentLeft + contentWidth - AdminTheme.SPACE_L - 92;
+        int newY = contentTop + (AdminTheme.SEARCH_BAR_HEIGHT - AdminTheme.BUTTON_HEIGHT_SM) / 2;
+        AdminPrimitives.drawButton(graphics, this.font, newX, newY, 92, AdminTheme.BUTTON_HEIGHT_SM,
+                "New Plan", AdminPrimitives.ButtonVariant.PRIMARY,
+                mouseX >= newX && mouseX < newX + 92 && mouseY >= newY
+                        && mouseY < newY + AdminTheme.BUTTON_HEIGHT_SM, false);
 
         // Plan list
         int cardY = listTop + AdminTheme.SPACE_L + AdminTheme.SPACE_S - scrollOffset;
         if (planCount == 0) {
-            String line1 = "No plans defined";
+            String line1 = "Plans".equals(ClientServerAdminCache.snapshot().tab())
+                    ? "No matching plans" : "Loading plans (operators only)";
             int line1W = this.font.width(line1);
             int textX = contentLeft + (contentWidth - line1W) / 2;
             int textY = listTop + (listHeight - this.font.lineHeight) / 2;
             drawLeftAlignedText(graphics, this.font, line1, textX, textY,
                     AdminTheme.TEXT_BODY, AdminColors.TEXT_MUTED, this.font.lineHeight);
         } else {
-            for (int i = 0; i < planCount; i++) {
+            graphics.enableScissor(contentLeft, listTop + 20, contentLeft + contentWidth, listBottom);
+            for (PlanEntry entry : getFilteredPlans()) {
+                EditPlanModal.PlanData plan = entry.data();
                 AdminPrimitives.drawCard(graphics, contentLeft, cardY, contentWidth, AdminTheme.ROW_HEIGHT_LARGE);
                 int textX = contentLeft + AdminTheme.SPACE_L;
-                drawLeftAlignedText(graphics, this.font, "Basic Plan",
+                drawLeftAlignedText(graphics, this.font, fitAdminText(plan.name(), contentWidth - 180, AdminTheme.TEXT_BODY),
                         textX, cardY + 4, AdminTheme.TEXT_BODY, AdminColors.TEXT_PRIMARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
-                drawLeftAlignedText(graphics, this.font, "$29.99",
-                        contentLeft + contentWidth - AdminTheme.SPACE_L - this.font.width("$29.99"), cardY + 4,
-                        AdminTheme.TEXT_BODY, AdminColors.TEXT_PRIMARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
-                drawLeftAlignedText(graphics, this.font, "1 tier - 30d cycle - 500min - 1000texts - 5000MB",
+                String summary = plan.price() + " credits / " + plan.cycle() + " days";
+                drawLeftAlignedText(graphics, this.font, fitAdminText(summary, contentWidth - 180, AdminTheme.TEXT_CAPTION),
                         textX, cardY + 4 + AdminTheme.TEXT_BODY, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
-                drawLeftAlignedText(graphics, this.font, "Carrier: Any",
+                drawLeftAlignedText(graphics, this.font, fitAdminText("ID: " + plan.id(), contentWidth - 180, AdminTheme.TEXT_CAPTION),
                         textX, cardY + 4 + AdminTheme.TEXT_BODY * 2, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
-                drawLeftAlignedText(graphics, this.font, "Roaming: CHARGED - Overage: yes",
-                        textX, cardY + 4 + AdminTheme.TEXT_BODY * 3, AdminTheme.TEXT_CAPTION, AdminColors.TEXT_SECONDARY, AdminTheme.ROW_HEIGHT_LARGE / 2);
 
                 int btnW = 70;
                 int btnH = AdminTheme.BUTTON_HEIGHT_SM;
@@ -930,7 +1014,53 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
 
                 cardY += AdminTheme.ROW_HEIGHT_LARGE + AdminTheme.SPACE_XS;
             }
+            graphics.disableScissor();
         }
+    }
+
+    private List<PlanEntry> getFilteredPlans() {
+        ServerAdminDataPacket snapshot = ClientServerAdminCache.snapshot();
+        if (!"Plans".equals(snapshot.tab())) return List.of();
+        String query = planSearchQuery.trim().toLowerCase(Locale.ROOT);
+        List<PlanEntry> plans = new ArrayList<>();
+        for (String row : snapshot.entries()) {
+            String[] f = row.split("\\|", -1);
+            if (f.length != 19 || !"plan".equals(f[0])) continue;
+            if (!f[1].toLowerCase(Locale.ROOT).contains(query)
+                    && !f[2].toLowerCase(Locale.ROOT).contains(query)) continue;
+            plans.add(new PlanEntry(new EditPlanModal.PlanData(f[1], f[2], f[12], f[3], f[5],
+                    f[6], f[7], f[8], f[13], f[4], Boolean.parseBoolean(f[9]), f[10], f[11],
+                    Boolean.parseBoolean(f[14]), Boolean.parseBoolean(f[15]), f[16], f[18])));
+        }
+        return plans;
+    }
+
+    private List<EditPlanModal.NetworkOption> getPlanNetworks() {
+        ServerAdminDataPacket snapshot = ClientServerAdminCache.snapshot();
+        if (!"Plans".equals(snapshot.tab())) return List.of();
+        List<EditPlanModal.NetworkOption> networks = new ArrayList<>();
+        for (String row : snapshot.entries()) {
+            String[] f = row.split("\\|", -1);
+            if (f.length == 3 && "plan_network".equals(f[0])) {
+                networks.add(new EditPlanModal.NetworkOption(f[1], f[2]));
+            }
+        }
+        return networks;
+    }
+
+    private void openPlanEditor(EditPlanModal.PlanData plan) {
+        ServerAdminDataPacket snapshot = ClientServerAdminCache.snapshot();
+        if (!"Plans".equals(snapshot.tab())) {
+            AdminToast.info("Plans are unavailable. Administrator permission is required.");
+            return;
+        }
+        List<String> ids = snapshot.entries().stream().map(row -> row.split("\\|", -1))
+                .filter(fields -> fields.length == 19 && "plan".equals(fields[0]))
+                .map(fields -> fields[1]).toList();
+        minecraft.setScreen(new EditPlanModal(this, plan, ids, getPlanNetworks(), fields ->
+                PacketDistributor.sendToServer(new ServerAdminActionPacket("Plans",
+                        plan.id().isBlank() ? "create" : "upsert",
+                        fields.get(0), String.join("|", fields.subList(1, fields.size()))))));
     }
 
     // === BILLING TAB ===
@@ -1318,7 +1448,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
     }
 
     private int getPlanCount() {
-        return 0;
+        return getFilteredPlans().size();
     }
 
     private int getTransactionCount() {
@@ -1326,6 +1456,11 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
     }
 
     // Helper methods for text rendering
+    private String fitAdminText(String text, int width, int textSize) {
+        int unscaledWidth = Math.max(0, width * font.lineHeight / textSize);
+        return font.plainSubstrByWidth(text, unscaledWidth);
+    }
+
     private void drawLeftAlignedText(GuiGraphics graphics, Font font, String text, int x, int y,
                                      int textSize, int color, int height) {
         if (text == null || text.isEmpty()) return;
@@ -1558,6 +1693,39 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                     itemY += AdminTheme.SIDEBAR_ITEM_HEIGHT + AdminTheme.SPACE_XXS;
                 }
 
+            if (activeTab == ServerTab.ROAMING) {
+                int y = listTop + 24 - scrollOffset;
+                for (RoamingEntry entry : getRoamingEntries()) {
+                    int bx = contentLeft + contentWidth - 78;
+                    if (mouseY >= listTop + 20 && mouseY < listBottom && mouseX >= bx && mouseX < bx + 68
+                            && mouseY >= y + 6 && mouseY < y + 6 + AdminTheme.BUTTON_HEIGHT_SM) {
+                        minecraft.setScreen(new RoamingRatesModal(this, entry.name(), entry.allowed(),
+                                entry.minute(), entry.text(), entry.data(), entry.automatic(),
+                                value -> PacketDistributor.sendToServer(new ServerAdminActionPacket(
+                                        "Roaming", "saveSettings", entry.id(), value))));
+                        return true;
+                    }
+                    y += AdminTheme.ROW_HEIGHT_LARGE + AdminTheme.SPACE_XS;
+                }
+                int refreshX = panelX + panelWidth - AdminTheme.SPACE_L - 80;
+                int refreshY = footerY + (AdminTheme.FOOTER_HEIGHT - AdminTheme.BUTTON_HEIGHT_SM) / 2;
+                if (mouseX >= refreshX && mouseX < refreshX + 80
+                        && mouseY >= refreshY && mouseY < refreshY + AdminTheme.BUTTON_HEIGHT_SM) {
+                    requestCurrentTabData();
+                }
+                return true;
+            }
+            if (activeTab != ServerTab.NETWORKS && activeTab != ServerTab.PLANS) {
+                int refreshX = panelX + panelWidth - AdminTheme.SPACE_L - 80;
+                int refreshY = footerY + (AdminTheme.FOOTER_HEIGHT - AdminTheme.BUTTON_HEIGHT_SM) / 2;
+                if (mouseX >= refreshX && mouseX < refreshX + 80
+                        && mouseY >= refreshY && mouseY < refreshY + AdminTheme.BUTTON_HEIGHT_SM) {
+                    requestCurrentTabData();
+                    AdminToast.info("Refresh requested");
+                }
+                return true;
+            }
+
             // Roaming sub-tab clicks (check before search bar so sub-tabs aren't consumed)
             if (activeTab == ServerTab.ROAMING) {
                 int subTabY = contentTop;
@@ -1612,8 +1780,15 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
 
             // Plan search bar focus
             if (activeTab == ServerTab.PLANS) {
+                int newX = contentLeft + contentWidth - AdminTheme.SPACE_L - 92;
+                int newY = contentTop + (AdminTheme.SEARCH_BAR_HEIGHT - AdminTheme.BUTTON_HEIGHT_SM) / 2;
+                if (mouseX >= newX && mouseX < newX + 92
+                        && mouseY >= newY && mouseY < newY + AdminTheme.BUTTON_HEIGHT_SM) {
+                    openPlanEditor(EditPlanModal.PlanData.empty());
+                    return true;
+                }
                 if (mouseX >= contentLeft + AdminTheme.SPACE_L &&
-                        mouseX < contentLeft + AdminTheme.SPACE_L + (contentWidth - AdminTheme.SPACE_L * 2) &&
+                        mouseX < contentLeft + AdminTheme.SPACE_L + (contentWidth - AdminTheme.SPACE_L * 2 - 100) &&
                         mouseY >= contentTop &&
                         mouseY < contentTop + AdminTheme.SEARCH_BAR_HEIGHT) {
                     focusedField = "planSearch";
@@ -1657,7 +1832,7 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                                         int newBtnY = contentTop + (AdminTheme.SEARCH_BAR_HEIGHT - AdminTheme.BUTTON_HEIGHT_SM) / 2;
                                         if (mouseX >= newBtnX && mouseX < newBtnX + 120 &&
                                                 mouseY >= newBtnY && mouseY < newBtnY + AdminTheme.BUTTON_HEIGHT_SM) {
-                                            openModal(ModalType.NEW_NETWORK, "", "");
+                                            minecraft.setScreen(new NetworkEditorScreen(this, "", "", false));
                                             return true;
                                         }
                                 }
@@ -1689,8 +1864,24 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                     }
                 }
 
-                // Network card buttons (placeholder)
-            // Would check card button hits here
+            if (activeTab == ServerTab.NETWORKS && mouseY >= listTop + 20 && mouseY < listBottom) {
+                int cardY = listTop + AdminTheme.SPACE_L + AdminTheme.SPACE_S - scrollOffset;
+                for (NetworkEntry network : getFilteredNetworks()) {
+                    int editX = contentLeft + contentWidth - 68;
+                    int editY = cardY + 6;
+                    if (mouseX >= editX && mouseX < editX + 58
+                            && mouseY >= editY && mouseY < editY + AdminTheme.BUTTON_HEIGHT_SM) {
+                        if ("Restore".equals(network.serverState())) {
+                            PacketDistributor.sendToServer(new ServerAdminActionPacket(
+                                    "Networks", "restore", network.id(), ""));
+                        } else {
+                            minecraft.setScreen(new NetworkEditorScreen(this, network.id(), network.name(), network.roaming()));
+                        }
+                        return true;
+                    }
+                    cardY += AdminTheme.ROW_HEIGHT_LARGE + AdminTheme.SPACE_XS;
+                }
+            }
 
             // Antenna tab interactions
             if (activeTab == ServerTab.ANTENNAS) {
@@ -1909,11 +2100,12 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
 
             // Plans tab: row buttons (Edit/Delete)
             if (activeTab == ServerTab.PLANS) {
-                int planCount = getPlanCount();
+                List<PlanEntry> plans = getFilteredPlans();
                 int cardY = listTop + AdminTheme.SPACE_L + AdminTheme.SPACE_S - scrollOffset;
-                for (int i = 0; i < planCount; i++) {
+                for (PlanEntry entry : plans) {
                     int rowY2 = cardY;
                     if (mouseX >= contentLeft && mouseX < contentLeft + contentWidth &&
+                            mouseY >= listTop + 20 && mouseY < listBottom &&
                             mouseY >= rowY2 && mouseY < rowY2 + AdminTheme.ROW_HEIGHT_LARGE) {
                         int btnW = 70;
                         int btnH = AdminTheme.BUTTON_HEIGHT_SM;
@@ -1921,13 +2113,16 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
                         int btnY = rowY2 + (AdminTheme.ROW_HEIGHT_LARGE - btnH) / 2;
                         if (mouseX >= btnX && mouseX < btnX + btnW &&
                                 mouseY >= btnY && mouseY < btnY + btnH) {
-                            openModal(ModalType.EDIT_PLAN, "", "");
+                            openPlanEditor(entry.data());
                             return true;
                         }
                         btnX += btnW + AdminTheme.SPACE_XS;
                         if (mouseX >= btnX && mouseX < btnX + btnW &&
                                 mouseY >= btnY && mouseY < btnY + btnH) {
-                            openModal(ModalType.CONFIRM_DELETE, "", "");
+                            EditPlanModal.PlanData plan = entry.data();
+                            minecraft.setScreen(new ConfirmActionModal(this, "Delete " + plan.name(), "",
+                                    confirmation -> PacketDistributor.sendToServer(
+                                            new ServerAdminActionPacket("Plans", "delete", plan.id(), confirmation.get(0)))));
                             return true;
                         }
                     }
@@ -2145,8 +2340,12 @@ public final class ServerBlockScreen extends AbstractContainerScreen<ServerMenu>
             showModalError("Name is required.");
             return;
         }
-        PacketDistributor.sendToServer(new com.example.mobilecellnetwork.network.packet.UpdateNetworkPacket(modalContextId, name, false));
-        AdminToast.success("Network updated");
+        if (!modalInput2.equalsIgnoreCase("true") && !modalInput2.equalsIgnoreCase("false")) {
+            showModalError("Allow roaming must be true or false.");
+            return;
+        }
+        PacketDistributor.sendToServer(new com.example.mobilecellnetwork.network.packet.UpdateNetworkPacket(
+                modalContextId, name, Boolean.parseBoolean(modalInput2)));
         closeModal();
     }
 

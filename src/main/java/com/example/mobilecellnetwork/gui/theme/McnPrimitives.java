@@ -2,12 +2,29 @@ package com.example.mobilecellnetwork.gui.theme;
 
 import com.example.mobilecellnetwork.gui.PhoneColors;
 import com.example.mobilecellnetwork.gui.PhoneStyle;
+import com.example.mobilecellnetwork.gui.PhoneFrame;
+import com.example.mobilecellnetwork.gui.SnappleText;
+import com.example.mobilecellnetwork.registry.ModItems;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 
 public final class McnPrimitives {
+    private static final ResourceLocation SNAPPLE_WALLPAPER = ResourceLocation.fromNamespaceAndPath(
+            "mobilecellnetwork", "textures/gui/snapple_wallpaper.png");
+    private static final ResourceLocation SNAPPLE_FRAME = ResourceLocation.fromNamespaceAndPath(
+            "mobilecellnetwork", "textures/gui/snapple_frame.png");
+    private static final ResourceLocation G24_WALLPAPER = ResourceLocation.fromNamespaceAndPath(
+            "mobilecellnetwork", "textures/gui/g24_wallpaper.png");
+    private static final ResourceLocation G24_FRAME = ResourceLocation.fromNamespaceAndPath(
+            "mobilecellnetwork", "textures/gui/g24_frame.png");
+
     private McnPrimitives() {
     }
 
@@ -23,44 +40,15 @@ public final class McnPrimitives {
             return;
         }
 
-            // Draw center rectangle (middle section, excluding corner areas vertically)
-            int centerTop = y + clampedRadius;
-            int centerBottom = y + height - clampedRadius;
-            if (centerTop < centerBottom) {
-                graphics.fill(x + clampedRadius, centerTop, x + width - clampedRadius, centerBottom, color);
-            }
-
-            // Draw top and bottom flat sections
-            graphics.fill(x + clampedRadius, y, x + width - clampedRadius, y + clampedRadius, color);
-            graphics.fill(x + clampedRadius, y + height - clampedRadius, x + width - clampedRadius, y + height, color);
-
-            // Draw left and right side vertical sections
-            graphics.fill(x, y + clampedRadius, x + clampedRadius, y + height - clampedRadius, color);
-            graphics.fill(x + width - clampedRadius, y + clampedRadius, x + width, y + height - clampedRadius, color);
-
-            // Draw four quarter-circles at corners
-            for (int cornerY = McnTheme.RADIUS_NONE; cornerY < clampedRadius;
-                 cornerY += McnTheme.DIVIDER_THICKNESS) {
-                for (int cornerX = McnTheme.RADIUS_NONE; cornerX < clampedRadius;
-                     cornerX += McnTheme.DIVIDER_THICKNESS) {
-                    if (!isInsideCorner(cornerX, cornerY, clampedRadius)) {
-                        continue;
-                    }
-                    int leftX = x + cornerX;
-                    int rightX = x + width - McnTheme.DIVIDER_THICKNESS - cornerX;
-                    int topY = y + cornerY;
-                    int bottomY = y + height - McnTheme.DIVIDER_THICKNESS - cornerY;
-                    graphics.fill(leftX, topY, leftX + McnTheme.DIVIDER_THICKNESS,
-                            topY + McnTheme.DIVIDER_THICKNESS, color);
-                    graphics.fill(rightX, topY, rightX + McnTheme.DIVIDER_THICKNESS,
-                            topY + McnTheme.DIVIDER_THICKNESS, color);
-                    graphics.fill(leftX, bottomY, leftX + McnTheme.DIVIDER_THICKNESS,
-                            bottomY + McnTheme.DIVIDER_THICKNESS, color);
-                    graphics.fill(rightX, bottomY, rightX + McnTheme.DIVIDER_THICKNESS,
-                            bottomY + McnTheme.DIVIDER_THICKNESS, color);
-                }
-            }
+        for (int row = 0; row < clampedRadius; row++) {
+            int inset = roundedRowInset(row, height, clampedRadius);
+            graphics.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
+            graphics.fill(x + inset, y + height - row - 1, x + width - inset, y + height - row, color);
         }
+        if (height > clampedRadius * 2) {
+            graphics.fill(x, y + clampedRadius, x + width, y + height - clampedRadius, color);
+        }
+    }
 
     public static void fillRoundedRectOutline(GuiGraphics graphics, int x, int y, int width, int height,
                                               int radius, int thickness, int color) {
@@ -103,8 +91,10 @@ public final class McnPrimitives {
 
     public static void drawCard(GuiGraphics graphics, PhoneStyle style, int x, int y, int width, int height) {
         fillRoundedRect(graphics, x, y, width, height, McnTheme.RADIUS_L, PhoneColors.bgSecondary(style));
-        fillRoundedRectOutline(graphics, x, y, width, height, McnTheme.RADIUS_L,
-                McnTheme.DIVIDER_THICKNESS, PhoneColors.divider(style));
+        if (style != PhoneStyle.SAMSUNG_ONE_UI) {
+            fillRoundedRectOutline(graphics, x, y, width, height, McnTheme.RADIUS_L,
+                    McnTheme.DIVIDER_THICKNESS, PhoneColors.divider(style));
+        }
     }
 
     public static void drawElevatedCard(GuiGraphics graphics, PhoneStyle style,
@@ -130,8 +120,7 @@ public final class McnPrimitives {
             case TERTIARY -> 0;
             case DESTRUCTIVE -> PhoneColors.error(style);
         };
-        int radius = Math.min(width, height) >= McnTheme.BUTTON_HEIGHT_MD
-                ? McnTheme.RADIUS_M : McnTheme.RADIUS_S;
+        int radius = height / 2;
         if (variant != ButtonVariant.TERTIARY) {
             fillRoundedRect(graphics, x, y, width, height, radius, fillColor);
             if (disabled) {
@@ -190,10 +179,12 @@ public final class McnPrimitives {
                 if (iconSize <= McnTheme.RADIUS_NONE) {
                     return;
                 }
-                int iconX = x + padding;
+                int iconWidth = style == PhoneStyle.SAMSUNG_ONE_UI
+                        ? Math.min(size, PhoneFrame.circularElementWidth(iconSize)) : iconSize;
+                int iconX = x + (size - iconWidth) / 2;
                 int iconY = y + padding;
                 int texSize = 512;
-                graphics.blit(png, iconX, iconY, iconSize, iconSize,
+                graphics.blit(png, iconX, iconY, iconWidth, iconSize,
                         0.0F, 0.0F, texSize, texSize, texSize, texSize);
                 return;
             }
@@ -202,13 +193,6 @@ public final class McnPrimitives {
             fillRoundedRect(graphics, x, y, size, size, size / McnTheme.RADIUS_S, backgroundColor);
             drawCenteredText(graphics, font, glyph, x, y, size, size,
                     size / McnTheme.SPACE_XXS, 0xFFFFFFFF, true);
-    }
-
-    private static boolean isInsideCorner(int cornerX, int cornerY, int radius) {
-        double halfPixel = McnTheme.DIVIDER_THICKNESS / (double) McnTheme.SPACE_XXS;
-        double distanceX = radius - cornerX - halfPixel;
-        double distanceY = radius - cornerY - halfPixel;
-        return distanceX * distanceX + distanceY * distanceY <= (double) radius * radius;
     }
 
     private static int roundedRowInset(int row, int height, int radius) {
@@ -247,6 +231,12 @@ public final class McnPrimitives {
             return;
         }
         float scale = textSize / (float) font.lineHeight;
+        if (com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle() == PhoneStyle.SAMSUNG_ONE_UI
+                && com.example.mobilecellnetwork.gui.PhoneFrame.isDrawingPhone()) {
+            scale = Math.min(scale, Math.max(0.1F, (width - 8.0F) / Math.max(1, font.width(text))));
+            scale = Math.min(scale, Math.max(0.1F, (height - 4.0F) / font.lineHeight));
+            shadow = false;
+        }
         graphics.pose().pushPose();
         graphics.pose().translate(x + width / (double) McnTheme.SPACE_XXS,
                 y + height / (double) McnTheme.SPACE_XXS, McnTheme.ELEV_0);
@@ -520,8 +510,49 @@ public final class McnPrimitives {
         int phoneX = (screenWidth - phoneWidth) / McnTheme.SPACE_XXS;
         int phoneY = (screenHeight - phoneHeight) / McnTheme.SPACE_XXS;
 
-            int bodyColor = PhoneColors.bgSecondary(style);
+        if (style == PhoneStyle.IOS) {
+            graphics.flush();
+            Minecraft minecraft = Minecraft.getInstance();
+            ItemStack phone = new ItemStack(ModItems.CELLPHONE.get());
+            var renderer = minecraft.getItemRenderer();
+            var model = renderer.getModel(phone, minecraft.level, minecraft.player, 0);
+            graphics.pose().pushPose();
+            graphics.pose().translate(phoneX + phoneWidth / 2.0F, phoneY + phoneHeight / 2.0F, -10.0F);
+            graphics.pose().scale(phoneWidth / (0.90F * 71.6F / 147.6F), -phoneHeight / 0.90F, 1.0F);
+            graphics.pose().mulPose(Axis.YP.rotationDegrees(180.0F));
+            renderer.render(phone, ItemDisplayContext.NONE, false, graphics.pose(), graphics.bufferSource(),
+                    LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, model);
+            graphics.flush();
+            graphics.pose().popPose();
+            int screenX = getScreenX(screenWidth);
+            int screenY = getScreenY(screenHeight);
+            graphics.fill(screenX, screenY, screenX + getScreenWidth(), screenY + getScreenHeight(),
+                    0xFF08090D);
+            fillRoundedRect(graphics, screenX, screenY, getScreenWidth(), getScreenHeight(),
+                    McnTheme.PHONE_RADIUS - McnTheme.PHONE_BEZEL, PhoneColors.bgPrimary(style));
+            graphics.blit(SNAPPLE_FRAME, phoneX, phoneY, phoneWidth, phoneHeight,
+                    0.0F, 0.0F, 880, 1600, 880, 1600);
+            drawPhoneCamera(graphics, style, getScreenX(screenWidth), getScreenY(screenHeight), getScreenWidth());
+            return;
+        }
 
+            if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+                int screenX = getScreenX(screenWidth);
+                int screenY = getScreenY(screenHeight);
+                fillRoundedRect(graphics, phoneX + 3, phoneY + 5, phoneWidth, phoneHeight,
+                        McnTheme.PHONE_RADIUS, 0x55000000);
+                fillRoundedRect(graphics, phoneX + 2, phoneY + 2, phoneWidth - 4, phoneHeight - 4,
+                        McnTheme.PHONE_RADIUS - 2, PhoneColors.bgPrimary(style));
+                graphics.blit(G24_FRAME, phoneX, phoneY, phoneWidth, phoneHeight,
+                        0.0F, 0.0F, 880, 1600, 880, 1600);
+                drawPhoneCamera(graphics, style, screenX, screenY, getScreenWidth());
+                return;
+            }
+
+            int bodyColor = 0xFF454D5C;
+
+            fillRoundedRect(graphics, phoneX + 3, phoneY + 5, phoneWidth, phoneHeight,
+                    McnTheme.PHONE_RADIUS, 0x55000000);
             fillRoundedRect(graphics, phoneX, phoneY, phoneWidth, phoneHeight,
                     McnTheme.PHONE_RADIUS, bodyColor);
             fillRoundedRectOutline(graphics, phoneX, phoneY, phoneWidth, phoneHeight,
@@ -545,12 +576,33 @@ public final class McnPrimitives {
                     fillRoundedRect(graphics, screenX, screenY, screenAreaWidth, screenAreaHeight,
                             screenRadius, PhoneColors.bgPrimary(style));
 
-            int notchX = screenX + (screenAreaWidth - McnTheme.PHONE_NOTCH_WIDTH) / McnTheme.SPACE_XXS;
-            int notchY = screenY + McnTheme.SPACE_XS;
-            fillRoundedRect(graphics, notchX, notchY, McnTheme.PHONE_NOTCH_WIDTH,
-                    McnTheme.PHONE_NOTCH_HEIGHT, McnTheme.PHONE_NOTCH_HEIGHT / McnTheme.SPACE_XXS,
-                    PhoneColors.bgSecondary(style));
+            drawPhoneCamera(graphics, style, screenX, screenY, screenAreaWidth);
         }
+
+    public static void drawPhoneWallpaper(GuiGraphics graphics, PhoneStyle style,
+                                          int screenX, int screenY, int width, int height) {
+        if (style == PhoneStyle.IOS) {
+            fillRoundedRect(graphics, screenX, screenY, width, height,
+                    McnTheme.PHONE_RADIUS - McnTheme.PHONE_BEZEL, 0xFF08090D);
+            graphics.blit(SNAPPLE_WALLPAPER, screenX, screenY, width, height,
+                    0.0F, 0.0F, 512, 960, 512, 960);
+            drawPhoneCamera(graphics, style, screenX, screenY, width);
+            return;
+        }
+        graphics.blit(G24_WALLPAPER, screenX, screenY, width, height,
+                0.0F, 0.0F, 512, 960, 512, 960);
+        drawPhoneCamera(graphics, style, screenX, screenY, width);
+    }
+
+    public static void drawPhoneCamera(GuiGraphics graphics, PhoneStyle style,
+                                        int screenX, int screenY, int width) {
+        int cameraWidth = style == PhoneStyle.IOS ? McnTheme.PHONE_NOTCH_WIDTH : 10;
+        int cameraHeight = style == PhoneStyle.IOS ? McnTheme.PHONE_NOTCH_HEIGHT : 10;
+        int x = screenX + (width - cameraWidth) / 2;
+        int y = screenY + McnTheme.SPACE_XS;
+        fillRoundedRect(graphics, x, y, cameraWidth, cameraHeight, cameraHeight / 2, 0xFF080A0F);
+        fillRoundedRect(graphics, x + cameraWidth - 8, y + 3, 4, 4, 2, 0xFF28354D);
+    }
 
     public static int getScreenX(int screenWidth) {
         return (screenWidth - McnTheme.PHONE_WIDTH) / McnTheme.SPACE_XXS + McnTheme.PHONE_BEZEL;
@@ -588,12 +640,21 @@ public final class McnPrimitives {
     public static void drawHeader(GuiGraphics graphics, PhoneStyle style, Font font,
                                   int x, int y, int width, String title, boolean showBackChevron) {
         float titleScale = McnTheme.TEXT_TITLE / (float) font.lineHeight;
-        int titleX = x + (showBackChevron ? McnTheme.SPACE_L + McnTheme.SPACE_XS : McnTheme.RADIUS_NONE);
+        int titleX = x + (showBackChevron ? McnTheme.SPACE_L + McnTheme.SPACE_XS
+                : style == PhoneStyle.SAMSUNG_ONE_UI ? McnTheme.SPACE_M : McnTheme.RADIUS_NONE);
+        if (style == PhoneStyle.SAMSUNG_ONE_UI) {
+            int maxWidth = Math.max(0, (int) ((width - (titleX - x) - McnTheme.SPACE_M) / titleScale));
+            title = font.plainSubstrByWidth(title, maxWidth);
+        }
         graphics.pose().pushPose();
         graphics.pose().translate(titleX, y + McnTheme.SPACE_XS, McnTheme.ELEV_0);
         graphics.pose().scale(titleScale, titleScale, McnTheme.ELEV_1);
-        graphics.drawString(font, title, McnTheme.RADIUS_NONE, McnTheme.RADIUS_NONE,
-                PhoneColors.textPrimary(style), true);
+        if (style == PhoneStyle.IOS) {
+            SnappleText.draw(graphics, font, title, 0, 0, PhoneColors.textPrimary(style));
+        } else {
+            graphics.drawString(font, title, 0, 0, PhoneColors.textPrimary(style),
+                    style != PhoneStyle.SAMSUNG_ONE_UI);
+        }
         graphics.pose().popPose();
 
         if (showBackChevron) {
@@ -644,6 +705,11 @@ public final class McnPrimitives {
                                          int screenX, int screenY, int screenWidth,
                                          String carrier, String time, int signalBars,
                                          int batteryPercent, boolean isRoaming, boolean hasService) {
+            if (style == PhoneStyle.IOS) {
+                drawSnappleStatusBar(graphics, font, screenX, screenY, screenWidth, time,
+                        signalBars, batteryPercent, isRoaming, hasService, PhoneColors.dark(style));
+                return;
+            }
             // Notch bottom is at screenY + SPACE_XS + PHONE_NOTCH_HEIGHT; start content below it
             int notchBottom = screenY + McnTheme.SPACE_XS + McnTheme.PHONE_NOTCH_HEIGHT;
             int contentY = notchBottom + McnTheme.SPACE_XXS;
@@ -699,6 +765,7 @@ public final class McnPrimitives {
                             displayCarrier = ellipsis;
                             carrierWidth = ellipsisWidth;
                         }
+
                     }
                     leftZoneWidth = carrierWidth + (isRoaming ? McnTheme.SPACE_XXS + roamingWidth : 0);
                 } else {
@@ -774,7 +841,72 @@ public final class McnPrimitives {
                     PhoneColors.textPrimary(style), true);
         }
 
-            public static boolean isInStatusBar(int screenY, int mouseY) {
+    public static void drawSnappleStatusBar(GuiGraphics graphics, Font font,
+                                             int screenX, int screenY, int screenWidth, String time,
+                                             int signalBars, int batteryPercent, boolean roaming,
+                                             boolean hasService, boolean onWallpaper) {
+        int color = onWallpaper ? 0xFFFFFFFF : 0xFF1C1C1E;
+        int muted = onWallpaper ? 0x88FFFFFF : 0x66808080;
+        SnappleText.draw(graphics, font, time == null ? "" : time, screenX + 13, screenY + 8, color);
+        int barsX = screenX + screenWidth - 56;
+        int bottom = screenY + 16;
+        if (!hasService) {
+            SnappleText.draw(graphics, font, "SOS", barsX - 5, screenY + 8, color);
+        } else {
+            if (roaming) {
+                SnappleText.draw(graphics, font, "R", barsX - 8, screenY + 8, color);
+            }
+
+            for (int i = 0; i < 4; i++) {
+                int barHeight = 3 + i * 2;
+                graphics.fill(barsX + i * 4, bottom - barHeight, barsX + i * 4 + 3, bottom,
+                        i < Math.clamp(signalBars, 0, 4) ? color : muted);
+            }
+        }
+        int batteryX = screenX + screenWidth - 32;
+        int batteryY = screenY + 7;
+        fillRoundedRectOutline(graphics, batteryX, batteryY, 20, 10, 3, 1, color);
+        graphics.fill(batteryX + 20, batteryY + 3, batteryX + 22, batteryY + 7, color);
+        int fill = Math.round(Math.clamp(batteryPercent, 0, 100) * 16 / 100.0F);
+        if (fill > 0) {
+            fillRoundedRect(graphics, batteryX + 2, batteryY + 2, fill, 6, 2,
+                    batteryPercent <= 20 ? 0xFFFF453A : color);
+        }
+    }
+
+    public static void drawAndroidStatusBar(GuiGraphics graphics, Font font,
+                                             int screenX, int screenY, int screenWidth, String time,
+                                             int signalBars, int batteryPercent, boolean roaming,
+                                             boolean hasService, boolean onWallpaper) {
+        int color = onWallpaper ? 0xFFFFFFFF : PhoneColors.textPrimary(PhoneStyle.SAMSUNG_ONE_UI);
+        int muted = onWallpaper ? 0x88FFFFFF : PhoneColors.textSecondary(PhoneStyle.SAMSUNG_ONE_UI);
+        graphics.drawString(font, time == null ? "" : time, screenX + 12, screenY + 8, color, false);
+        int barsX = screenX + screenWidth - 57;
+        int bottom = screenY + 16;
+        if (!hasService) {
+            graphics.drawString(font, "!", barsX + 5, screenY + 7, color, false);
+        } else {
+            if (roaming) {
+                graphics.drawString(font, "R", barsX - 9, screenY + 8, color, false);
+            }
+            for (int i = 0; i < 4; i++) {
+                int barHeight = 3 + i * 2;
+                graphics.fill(barsX + i * 4, bottom - barHeight, barsX + i * 4 + 3, bottom,
+                        i < Math.clamp(signalBars, 0, 4) ? color : muted);
+            }
+        }
+        int batteryX = screenX + screenWidth - 32;
+        int batteryY = screenY + 7;
+        fillRoundedRectOutline(graphics, batteryX, batteryY, 20, 10, 3, 1, color);
+        graphics.fill(batteryX + 20, batteryY + 3, batteryX + 22, batteryY + 7, color);
+        int fill = Math.round(Math.clamp(batteryPercent, 0, 100) * 16 / 100.0F);
+        if (fill > 0) {
+            fillRoundedRect(graphics, batteryX + 2, batteryY + 2, fill, 6, 2,
+                    batteryPercent <= 20 ? 0xFFFF453A : color);
+        }
+    }
+
+    public static boolean isInStatusBar(int screenY, int mouseY) {
         return mouseY >= screenY && mouseY < screenY + McnTheme.STATUS_BAR_HEIGHT;
     }
 }

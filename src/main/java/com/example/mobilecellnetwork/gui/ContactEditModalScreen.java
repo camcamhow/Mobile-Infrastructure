@@ -66,7 +66,7 @@ public final class ContactEditModalScreen extends Screen implements PhoneNavigab
         String contactName = name.getValue().strip();
         String phoneNumber = number.getValue().strip();
         if (contactName.isBlank() || !phoneNumber.matches("[0-9]{1,9}")) {
-            error = "Enter a name and valid phone number.";
+            error = "Enter a name and 1-9 digits.";
             return;
         }
         PacketDistributor.sendToServer(new ContactsActionPacket(
@@ -84,17 +84,35 @@ public final class ContactEditModalScreen extends Screen implements PhoneNavigab
         int x = modalX();
         int y = modalY();
         PhoneStyle style = ClientPhoneCache.phoneStyle();
-        PhoneRenderer.drawCard(graphics, style, x, y, 192, 160);
-        PhoneRenderer.drawHeader(graphics, style, x + 4, y + 10,
-                previousName.isBlank() ? "New Contact" : "Edit Contact", font, false);
+        if (style == PhoneStyle.IOS) {
+            SnappleAppLayout.screen(graphics, font, PhoneFrame.getScreenX(this),
+                    PhoneFrame.getScreenY(this), "Contacts");
+            SnappleAppLayout.group(graphics, x, y, 192, 160);
+            SnappleText.draw(graphics, font, previousName.isBlank() ? "New Contact" : "Edit Contact",
+                    x + 10, y + 17, PhoneColors.textPrimary(style));
+            SnappleText.draw(graphics, font, "Name", x + 10, y + 42, PhoneColors.textSecondary(style));
+            SnappleText.draw(graphics, font, "Phone number", x + 10, y + 79, PhoneColors.textSecondary(style));
+        } else {
+            PhoneRenderer.drawCard(graphics, style, x, y, 192, 160);
+            PhoneRenderer.drawHeader(graphics, style, x + 4, y + 10,
+                    previousName.isBlank() ? "New Contact" : "Edit Contact", font, false);
+        }
         PhoneTextField.renderBackground(graphics, style, x + 10, y + 54, 164, 22);
         PhoneTextField.renderBackground(graphics, style, x + 10, y + 91, 164, 22);
         super.render(graphics, PhoneFrame.displayMouseX(this, mouseX),
                 PhoneFrame.displayMouseY(this, mouseY), partialTick);
-        PhoneRenderer.drawPrimaryButton(graphics, style, x + 10, y + 119, 76, 22, "Save", font);
-        PhoneRenderer.drawSecondaryButton(graphics, style, x + 98, y + 119, 76, 22, "Cancel", font);
+        if (style == PhoneStyle.IOS) {
+            SnappleAppLayout.pill(graphics, font, x + 10, y + 119, 76, 22, "Save",
+                    PhoneColors.accent(style), 0xFFFFFFFF);
+            SnappleAppLayout.pill(graphics, font, x + 98, y + 119, 76, 22, "Cancel",
+                    PhoneColors.bgTertiary(style), PhoneColors.accent(style));
+        } else {
+            PhoneRenderer.drawPrimaryButton(graphics, style, x + 10, y + 119, 76, 22, "Save", font);
+            PhoneRenderer.drawSecondaryButton(graphics, style, x + 98, y + 119, 76, 22, "Cancel", font);
+        }
         if (!error.isBlank()) {
-            graphics.drawString(font, error, x + 10, y + 144, PhoneColors.error(style), true);
+            graphics.drawString(font, font.plainSubstrByWidth(error, 172),
+                    x + 10, y + 144, PhoneColors.error(style), true);
         }
         PhoneFrame.renderStatusBar(graphics, this);
     }

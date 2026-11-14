@@ -36,10 +36,11 @@ public final class LineOfSight {
 
         Vec3 direction = delta.scale(1.0D / distance);
         double sum = 0.0D;
+        double sampleStep = distance / (sampleCount + 1);
         for (int sample = 1; sample <= sampleCount; sample++) {
-            double distanceAlong = Math.min(distance - 1.0E-4D, sample * interval);
+            double distanceAlong = sample * sampleStep;
             Vec3 point = from.add(direction.scale(distanceAlong));
-            Vec3 halfStep = direction.scale(Math.min(interval * 0.5D, 0.5D));
+            Vec3 halfStep = direction.scale(sampleStep * 0.5D);
             Vec3 rayStart = point.subtract(halfStep);
             Vec3 rayEnd = point.add(halfStep);
             BlockHitResult hit = level.clip(new ClipContext(rayStart, rayEnd,

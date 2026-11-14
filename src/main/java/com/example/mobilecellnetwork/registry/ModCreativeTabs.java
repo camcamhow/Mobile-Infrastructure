@@ -19,12 +19,15 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.COPPER_ANTENNA.get());
                         output.accept(ModItems.IRON_ANTENNA.get());
                         output.accept(ModItems.DIAMOND_ANTENNA.get());
+                        output.accept(ModItems.TEST_ANTENNA.get());
                         output.accept(ModItems.SERVER_BLOCK.get());
+                        output.accept(ModItems.SIGNAL_BOOSTER.get());
                         output.accept(ModItems.ATM_BLOCK.get());
                         output.accept(ModItems.SHOP_TERMINAL_BLOCK.get());
                         output.accept(ModItems.PHONE_CHARGER.get());
                         output.accept(ModItems.EMERGENCY_DISPATCH.get());
                         output.accept(ModItems.CELLPHONE.get());
+                        output.accept(ModItems.ANDROID_PHONE.get());
                         output.accept(ModItems.BANK_CARD.get());
                     })
                     .build());

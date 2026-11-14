@@ -12,7 +12,7 @@ public final class ServerBlockPlaceHandler {
     private ServerBlockPlaceHandler() {
     }
 
-    /** Assigns the new server block to the placer's only unassigned network, otherwise creates a network. */
+    /** Restores a matching server, assigns an unambiguous network, or creates one if needed. */
     public static String assignOrCreate(ServerPlayer player, BlockPos blockPos) {
         NetworkSavedData data = NetworkSavedData.get(player.server.overworld());
         List<String> unassigned = data.getNetworks().entrySet().stream()
@@ -20,9 +20,29 @@ public final class ServerBlockPlaceHandler {
                 .map(Map.Entry::getKey)
                 .filter(id -> !data.getNetworkSettings(id).hasServerBlock())
                 .toList();
+        List<String> matching = unassigned.stream()
+                .filter(id -> data.getNetworkSettings(id).wasServerAt(
+                        player.level().dimension().location().toString(), blockPos.asLong()))
+                .toList();
+        if (!matching.isEmpty()) {
+            for (String id : matching) {
+                assign(player, data, id, blockPos);
+                if (player.serverLevel().getBlockEntity(blockPos)
+                        instanceof com.example.mobilecellnetwork.blockentity.ServerBlockEntity serverBlock) {
+                    serverBlock.addManagedNetwork(id);
+                }
+            }
+            return matching.getFirst();
+        }
         if (unassigned.size() == 1) {
-            assign(player, data, unassigned.getFirst(), blockPos);
-            return unassigned.getFirst();
+            String id = unassigned.getFirst();
+            assign(player, data, id, blockPos);
+            return id;
+        }
+        if (!unassigned.isEmpty()) {
+            player.sendSystemMessage(Component.literal(
+                    "Choose a network to restore in this server's Networks menu."));
+            return null;
         }
         return createNewNetwork(player, blockPos, "", "");
     }
@@ -51,6 +71,22 @@ public final class ServerBlockPlaceHandler {
         data.setDirty();
         player.displayClientMessage(Component.literal("Server block assigned to network "
                 + data.getNetwork(networkId).name() + "."), true);
+    }
+
+    public static boolean restore(ServerPlayer player, BlockPos pos, String networkId) {
+        NetworkSavedData data = NetworkSavedData.get(player.server.overworld());
+        var network = data.getNetwork(networkId);
+        var settings = data.getNetworkSettings(networkId);
+        if (network == null || !player.getUUID().equals(network.ownerUUID())
+                || settings.hasServerBlock()
+                || !(player.serverLevel().getBlockEntity(pos)
+                instanceof com.example.mobilecellnetwork.blockentity.ServerBlockEntity serverBlock)
+                || !serverBlock.getManagedNetworks().isEmpty()) {
+            return false;
+        }
+        assign(player, data, networkId, pos);
+        serverBlock.addManagedNetwork(networkId);
+        return true;
     }
 
     /** Called when a server block is removed: the network goes offline but nothing is deleted. */

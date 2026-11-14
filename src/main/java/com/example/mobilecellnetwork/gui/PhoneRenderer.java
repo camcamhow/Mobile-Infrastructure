@@ -45,7 +45,8 @@ public final class PhoneRenderer {
         int background = sent ? PhoneColors.accent(style) : PhoneColors.bgTertiary(style);
         fillRoundedRect(graphics, style, x, y, width, height, 10, background);
         graphics.drawString(font, fit(font, text, width - 12), x + 6,
-                y + (height - font.lineHeight) / 2, PhoneColors.textPrimary(style), true);
+                y + (height - font.lineHeight) / 2,
+                sent ? PhoneColors.buttonTextOnAccent(style) : PhoneColors.textPrimary(style), true);
     }
 
     public static void drawBubble(GuiGraphics graphics, PhoneStyle style, int x, int y, int width, int height,
@@ -55,7 +56,7 @@ public final class PhoneRenderer {
         fillRoundedRect(graphics, style, x, y, width, height, 10, background);
         for (int index = 0; index < lines.size(); index++) {
             graphics.drawString(font, lines.get(index), x + 6, y + 4 + index * font.lineHeight,
-                    PhoneColors.textPrimary(style), true);
+                    sent ? PhoneColors.buttonTextOnAccent(style) : PhoneColors.textPrimary(style), true);
         }
     }
 

@@ -62,8 +62,8 @@ public final class ChatInterceptor {
         event.setCanceled(true);
         sendReminder(player);
         LOGGER.debug("Blocked vanilla chat message from {}: {}", player.getGameProfile().getName(), event.getRawText());
-        if (player.getMainHandItem().is(ModItems.CELLPHONE.get())
-                || player.getOffhandItem().is(ModItems.CELLPHONE.get())) {
+        if (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(player.getMainHandItem())
+                || com.example.mobilecellnetwork.item.CellphoneItem.isPhone(player.getOffhandItem())) {
             PhoneData phoneData = player.getData(ModCapabilities.PHONE_DATA);
             phoneData.getNotifications().add(new PhoneData.Notification(
                     "SMS", "New message reminder: use SMS.", System.currentTimeMillis()));
