@@ -23,9 +23,6 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 
 public final class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MobileCellNetwork.MOD_ID);
-    public static final DeferredHolder<Block, NetworkBlock> POWER_TAP = BLOCKS.register("power_tap",
-            () -> new com.example.mobilecellnetwork.block.PowerTapBlock(
-                    BlockBehaviour.Properties.of().strength(3.0F).sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredHolder<Block, NetworkBlock> COPPER_ANTENNA = BLOCKS.register(
             "copper_antenna",
@@ -43,22 +40,6 @@ public final class ModBlocks {
             "test_antenna",
             () -> new TestTowerBlock(antennaProperties(3.0F).noOcclusion())
     );
-    public static final DeferredHolder<Block, NetworkBlock> TOWER_TIER_1 = BLOCKS.register("tower_tier_1",
-            () -> new TestTowerBlock(antennaProperties(3).noOcclusion(),
-                    com.example.mobilecellnetwork.block.TowerVariant.TIER_1));
-    public static final DeferredHolder<Block, NetworkBlock> MONOPOLE_TOWER = BLOCKS.register("monopole_tower",
-            () -> new TestTowerBlock(antennaProperties(3).noOcclusion(),
-                    com.example.mobilecellnetwork.block.TowerVariant.MONOPOLE));
-    public static final DeferredHolder<Block, TestTowerSectionBlock> MONOPOLE_TOWER_SECTION =
-            BLOCKS.register("monopole_tower_section",
-                    () -> towerSection(com.example.mobilecellnetwork.block.TowerVariant.MONOPOLE));
-    public static final DeferredHolder<Block, NetworkBlock> TOWER_TIER_2 = BLOCKS.register("tower_tier_2",
-            () -> new TestTowerBlock(antennaProperties(3).noOcclusion(),
-                    com.example.mobilecellnetwork.block.TowerVariant.TIER_2));
-    public static final DeferredHolder<Block, TestTowerSectionBlock> TOWER_TIER_1_SECTION =
-            BLOCKS.register("tower_tier_1_section", () -> towerSection(com.example.mobilecellnetwork.block.TowerVariant.TIER_1));
-    public static final DeferredHolder<Block, TestTowerSectionBlock> TOWER_TIER_2_SECTION =
-            BLOCKS.register("tower_tier_2_section", () -> towerSection(com.example.mobilecellnetwork.block.TowerVariant.TIER_2));
     public static final DeferredHolder<Block, TestTowerSectionBlock> TEST_TOWER_SECTION = BLOCKS.register(
             "test_tower_section",
             () -> new TestTowerSectionBlock(antennaProperties(3.0F).noOcclusion().noLootTable()
@@ -93,11 +74,6 @@ public final class ModBlocks {
     );
 
     private ModBlocks() {
-    }
-
-    private static TestTowerSectionBlock towerSection(com.example.mobilecellnetwork.block.TowerVariant variant) {
-        return new TestTowerSectionBlock(antennaProperties(3).noOcclusion().noLootTable()
-                .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK), variant);
     }
 
     private static BlockBehaviour.Properties antennaProperties(float strength) {

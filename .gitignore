@@ -1,0 +1,7 @@
+/.gradle/
+/bin/
+/build/
+
+/build_error.txt
+/output.txt
+/repomix-output.xml

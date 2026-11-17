@@ -45,13 +45,6 @@ public class NetworkBlock extends Block implements EntityBlock {
     public void setPlacedBy(Level level, BlockPos position, BlockState state,
                             @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, position, state, placer, stack);
-        if (!level.isClientSide
-                && com.example.mobilecellnetwork.config.MobileCellNetworkConfig.REQUIRE_INSTALLATION.get()
-                && level.getBlockEntity(position) instanceof com.example.mobilecellnetwork.infrastructure.Serviceable device) {
-            device.installation().begin(placer instanceof Player player ? player.getUUID() : null);
-            level.getBlockEntity(position).setChanged();
-            level.sendBlockUpdated(position, state, state, 3);
-        }
         if (!level.isClientSide && placer instanceof Player player
                 && level.getBlockEntity(position) instanceof AntennaBlockEntity antenna) {
             antenna.setOwner(player.getUUID(), player.getGameProfile().getName());
@@ -81,8 +74,6 @@ public class NetworkBlock extends Block implements EntityBlock {
                 booster.tick();
             } else if (blockEntity instanceof ServerBlockEntity server) {
                 server.tick();
-            } else if (blockEntity instanceof com.example.mobilecellnetwork.blockentity.PowerTapBlockEntity tap) {
-                tap.tick();
             }
         };
     }
@@ -100,7 +91,10 @@ public class NetworkBlock extends Block implements EntityBlock {
         }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
             if (blockEntity instanceof com.example.mobilecellnetwork.blockentity.SignalBoosterBlockEntity booster) {
-                booster.openMenu(serverPlayer);
+                boolean bypass = com.example.mobilecellnetwork.blockentity.InfrastructurePower.bypassed(level);
+                serverPlayer.displayClientMessage(Component.literal("Signal booster: " + booster.getEnergyStored()
+                        + "/" + booster.getMaxEnergyStored() + " FE"
+                        + (bypass ? " | Power bypass" : booster.isPowered() ? " | Powered" : " | No power")), true);
                 return InteractionResult.CONSUME;
             }
             if (blockEntity instanceof AntennaBlockEntity antenna) {

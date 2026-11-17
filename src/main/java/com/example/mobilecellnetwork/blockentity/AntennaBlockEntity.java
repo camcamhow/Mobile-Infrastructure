@@ -25,13 +25,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.minecraft.world.phys.Vec3;
 
-public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyStorage,
-        com.example.mobilecellnetwork.infrastructure.Serviceable {
-    private final com.example.mobilecellnetwork.infrastructure.Installation installation =
-            new com.example.mobilecellnetwork.infrastructure.Installation();
-
-    @Override
-    public com.example.mobilecellnetwork.infrastructure.Installation installation() { return installation; }
+public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyStorage {
     private static final Set<AntennaBlockEntity> LOADED_ANTENNAS = new HashSet<>();
 
     private String networkId = "default";
@@ -162,7 +156,6 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
     }
 
     public AntennaTier getTier() { return tier; }
-    public com.example.mobilecellnetwork.network.SignalTier getMaxSignalTier() { return tier.maxSignalTier(); }
     public boolean isEnabled() { return enabled; }
 
     public void setEnabled(boolean enabled) {
@@ -174,16 +167,13 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
     }
 
     public Set<BlockPos> getMeshLinks() { return Set.copyOf(meshLinks); }
-    public AntennaPowerState getPowerState() {
-        return installation.ready() ? powerState : AntennaPowerState.UNPOWERED;
-    }
-    public boolean isPowered() { return getPowerState() != AntennaPowerState.UNPOWERED; }
+    public AntennaPowerState getPowerState() { return powerState; }
+    public boolean isPowered() { return powerState != AntennaPowerState.UNPOWERED; }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = new CompoundTag();
         tag.putString("powerState", powerState.name());
         tag.putString("networkId", networkId);
         tag.putBoolean("enabled", enabled);
-        tag.put("installation", installation.save());
         return tag;
     }
     @Override public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
@@ -195,7 +185,6 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
         }
         networkId = tag.getString("networkId");
         enabled = tag.getBoolean("enabled");
-        installation.load(tag.getCompound("installation"));
     }
     @Override public void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet,
                                         HolderLookup.Provider registries) {
@@ -236,7 +225,6 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
             return;
         }
         LOADED_ANTENNAS.add(this);
-        com.example.mobilecellnetwork.infrastructure.PowerWire.tick(this, installation, this);
         if (level.getGameTime() % 40 == 0) {
             rescanMeshLinks(level);
             if (level instanceof ServerLevel serverLevel) {
@@ -320,7 +308,7 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
         }
         int previousEnergy = energy;
         AntennaPowerState newState;
-        if (!enabled || !installation.ready()) {
+        if (!enabled) {
             newState = AntennaPowerState.UNPOWERED;
         } else if (!requiresEnergy()) {
             newState = AntennaPowerState.FE_DISABLED;
@@ -351,7 +339,7 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
             return;
         }
         AntennaPowerState refreshedState;
-        if (!enabled || !installation.ready()) {
+        if (!enabled) {
             refreshedState = AntennaPowerState.UNPOWERED;
         } else if (!requiresEnergy()) {
             refreshedState = AntennaPowerState.FE_DISABLED;
@@ -443,7 +431,6 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        installation.load(tag.getCompound("installation"));
         networkId = tag.contains("networkId", Tag.TAG_STRING) ? tag.getString("networkId") : "default";
         ownerUUID = tag.hasUUID("ownerUUID") ? tag.getUUID("ownerUUID") : null;
         ownerName = ownerUUID == null ? "Server"
@@ -493,7 +480,6 @@ public abstract class AntennaBlockEntity extends BlockEntity implements IEnergyS
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.put("installation", installation.save());
         tag.putString("networkId", networkId);
         if (ownerUUID != null) {
             tag.putUUID("ownerUUID", ownerUUID);

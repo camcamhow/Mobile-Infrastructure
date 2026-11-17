@@ -44,11 +44,6 @@ sourceSets.main.resources {
     srcDir 'src/generated/resources'
 }
 
-sourceSets.test {
-    compileClasspath += sourceSets.main.compileClasspath
-    runtimeClasspath += sourceSets.main.runtimeClasspath
-}
-
 tasks.withType(ProcessResources).configureEach {
     def replaceProperties = [
             minecraft_version      : minecraft_version,
@@ -71,70 +66,4 @@ tasks.withType(ProcessResources).configureEach {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-}
-
-tasks.register('verifyTowerGeometry', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.mobilecellnetwork.block.TestTowerGeometryChecks'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-tasks.register('verifyInstallations', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.mobilecellnetwork.infrastructure.InstallationChecks'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-tasks.register('verifyTowerLightsFirst', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.mobilecellnetwork.block.TestTowerGeometryChecks'
-    args 'lights-first'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-tasks.named('check') {
-    dependsOn tasks.named('verifyTowerOutlines')
-    dependsOn tasks.named('verifyTowerSectionConstruction')
-    dependsOn tasks.named('verifyTowerGeometry')
-    dependsOn tasks.named('verifyTowerLightsFirst')
-    dependsOn tasks.named('verifyInstallations')
-    dependsOn tasks.named('verifyDedicatedServerClassloading')
-}
-
-tasks.register('verifyTowerOutlines', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.mobilecellnetwork.block.TestTowerGeometryChecks'
-    args 'outlines'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-tasks.register('verifyTowerSectionConstruction', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.mobilecellnetwork.block.TestTowerGeometryChecks'
-    args 'sections-first'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
-tasks.register('verifyDedicatedServerClassloading', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.mobilecellnetwork.DedicatedServerClassloadingChecks'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
 }

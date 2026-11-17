@@ -1,10 +1,8 @@
 package com.example.mobilecellnetwork.gui;
 
 import com.example.mobilecellnetwork.network.CallControlPacket;
-import com.example.mobilecellnetwork.network.CallStatePacket;
 import com.example.mobilecellnetwork.network.ClientCallCache;
 import com.example.mobilecellnetwork.network.ClientPhoneCache;
-import com.example.mobilecellnetwork.network.OpenHeldPhonePacket;
 import com.example.mobilecellnetwork.voice.CallSession;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -17,26 +15,6 @@ public final class CallOverlay {
     private static final int PANEL_X = 8;
     private static final int PANEL_WIDTH = 176;
     private CallOverlay() {
-    }
-
-    public static void onCallStateUpdated(CallStatePacket packet) {
-        if (!packet.incoming() || !CallSession.State.RINGING.name().equals(packet.state())) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null) {
-            return;
-        }
-        if (minecraft.screen instanceof PhoneNavigableScreen phoneScreen
-                && !(minecraft.screen instanceof LockScreen)
-                && !(minecraft.screen instanceof PhoneSetupScreen)
-                && phoneScreen.phoneMenu() != null) {
-            minecraft.setScreen(new CallScreen(phoneScreen.phoneMenu(), ""));
-        } else if (minecraft.screen == null
-                && (com.example.mobilecellnetwork.item.CellphoneItem.isPhone(minecraft.player.getMainHandItem())
-                || com.example.mobilecellnetwork.item.CellphoneItem.isPhone(minecraft.player.getOffhandItem()))) {
-            PacketDistributor.sendToServer(new OpenHeldPhonePacket());
-        }
     }
 
     public static void onRender(RenderGuiEvent.Post event) {
@@ -121,18 +99,10 @@ public final class CallOverlay {
             if (mouseX >= PANEL_X + 5 && mouseX < PANEL_X + 57) {
                 send(CallControlPacket.Action.MUTE, !ClientCallCache.muted());
                 event.setCanceled(true);
-            } else if (mouseX >= PANEL_X + 62 && mouseX < PANEL_X + 114) {
-                if (minecraft.screen instanceof PhoneNavigableScreen phone && phone.phoneMenu() != null) {
-                    minecraft.setScreen(new CallScreen(phone.phoneMenu(), ""));
-                    event.setCanceled(true);
-                } else if (minecraft.screen == null && minecraft.player != null
-                        && (com.example.mobilecellnetwork.item.CellphoneItem
-                        .isPhone(minecraft.player.getMainHandItem())
-                        || com.example.mobilecellnetwork.item.CellphoneItem
-                        .isPhone(minecraft.player.getOffhandItem()))) {
-                    PacketDistributor.sendToServer(new OpenHeldPhonePacket());
-                    event.setCanceled(true);
-                }
+            } else if (mouseX >= PANEL_X + 62 && mouseX < PANEL_X + 114
+                    && minecraft.screen instanceof PhoneNavigableScreen phone) {
+                minecraft.setScreen(new CallScreen(phone.phoneMenu(), ""));
+                event.setCanceled(true);
             } else if (mouseX >= PANEL_X + 119 && mouseX < PANEL_X + 171) {
                 send(CallControlPacket.Action.HANG_UP, false);
                 event.setCanceled(true);

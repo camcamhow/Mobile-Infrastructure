@@ -15,7 +15,6 @@ public final class MobileCellNetworkConfig {
     public static final ModConfigSpec.BooleanValue ALLOW_MESH_SHARING;
     public static final ModConfigSpec.BooleanValue EMERGENCY_ONLY_WHEN_NO_SERVICE;
     public static final ModConfigSpec.BooleanValue REQUIRE_ENERGY;
-    public static final ModConfigSpec.BooleanValue REQUIRE_INSTALLATION;
     public static final ModConfigSpec.IntValue ANTENNA_CAPACITY_COPPER;
     public static final ModConfigSpec.IntValue ANTENNA_CAPACITY_IRON;
     public static final ModConfigSpec.IntValue ANTENNA_CAPACITY_DIAMOND;
@@ -115,8 +114,6 @@ public final class MobileCellNetworkConfig {
         EMERGENCY_ONLY_WHEN_NO_SERVICE = builder.define("emergencyOnlyWhenNoService", true);
         builder.comment("If false, antennas work without FE. If true, they need stored energy to provide service.");
         REQUIRE_ENERGY = builder.define("requireEnergy", true);
-        builder.comment("Require electronics, a spool-connected power wire and commissioning on newly placed antennas and boosters.");
-        REQUIRE_INSTALLATION = builder.define("requireInstallation", true);
         builder.comment("Maximum FE energy storage for each antenna tier.");
         ANTENNA_CAPACITY_COPPER = builder.defineInRange("antennaCapacity_COPPER", 10_000, 1, Integer.MAX_VALUE);
         ANTENNA_CAPACITY_IRON = builder.defineInRange("antennaCapacity_IRON", 25_000, 1, Integer.MAX_VALUE);

@@ -19,9 +19,6 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 public final class ModBlockEntities {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MobileCellNetwork.MOD_ID);
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.mobilecellnetwork.blockentity.PowerTapBlockEntity>>
-            POWER_TAP = BLOCK_ENTITY_TYPES.register("power_tap", () -> BlockEntityType.Builder.of(
-                    com.example.mobilecellnetwork.blockentity.PowerTapBlockEntity::new, ModBlocks.POWER_TAP.get()).build(null));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CopperAntennaBlockEntity>> COPPER_ANTENNA =
             BLOCK_ENTITY_TYPES.register("copper_antenna", () -> BlockEntityType.Builder.of(
@@ -34,9 +31,7 @@ public final class ModBlockEntities {
                     DiamondAntennaBlockEntity::new, ModBlocks.DIAMOND_ANTENNA.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TestAntennaBlockEntity>> TEST_ANTENNA =
             BLOCK_ENTITY_TYPES.register("test_antenna", () -> BlockEntityType.Builder.of(
-                    TestAntennaBlockEntity::new, ModBlocks.TEST_ANTENNA.get(),
-                    ModBlocks.TOWER_TIER_1.get(), ModBlocks.TOWER_TIER_2.get(),
-                    ModBlocks.MONOPOLE_TOWER.get()).build(null));
+                    TestAntennaBlockEntity::new, ModBlocks.TEST_ANTENNA.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ServerBlockEntity>> SERVER =
             BLOCK_ENTITY_TYPES.register("server_block", () -> BlockEntityType.Builder.of(
                     ServerBlockEntity::new, ModBlocks.SERVER_BLOCK.get()).build(null));

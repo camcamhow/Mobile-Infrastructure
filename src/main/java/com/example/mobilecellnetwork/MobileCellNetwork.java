@@ -41,7 +41,9 @@ public final class MobileCellNetwork {
         modEventBus.addListener(ModCapabilities::register);
         modEventBus.addListener(NetworkHandler::registerPayloads);
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            com.example.mobilecellnetwork.client.ClientInitialization.register(modEventBus);
+            modEventBus.addListener(com.example.mobilecellnetwork.gui.ModScreens::register);
+            modEventBus.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::registerKeys);
+            modEventBus.addListener(com.example.mobilecellnetwork.client.ClientRenderers::register);
         }
         NeoForge.EVENT_BUS.addListener(PlayerDataEvents::onPlayerLogin);
         NeoForge.EVENT_BUS.addListener(PlayerDataEvents::onPlayerLogout);
@@ -57,11 +59,38 @@ public final class MobileCellNetwork {
         NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.ConnectionDelayService::onServerTick);
         NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.voice.CallManager::onServerTick);
         NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.PhoneDeviceService::onServerTick);
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.CallOverlay::onRender);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.NotificationOverlay::onRender);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.PhoneStatusHud::onRender);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.CameraPreviewCapture::onRenderLevel);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.VideoCallClient::onRenderLevel);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.VideoCallClient::onTick);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.CameraPreviewCapture::onComputeFov);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.event.TowerPlacementPreview::onRenderLevel);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.CallOverlay::onMouseButton);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.PhoneNavigation::onMouseButton);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::tick);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::onKeyPressed);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::onMousePressed);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::onMouseDragged);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::onMouseReleased);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::onScreenClosing);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.gui.HeldPhoneView::onRenderHand);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.ClientRoamingCache::onClientLogin);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.ClientRoamingCache::onClientLogout);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.ClientPlanCache::onClientLogin);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.ClientPlanCache::onClientLogout);
+            NeoForge.EVENT_BUS.addListener(com.example.mobilecellnetwork.network.ClientPlanCache::onClientClone);
+            NeoForge.EVENT_BUS.addListener(
+                    com.example.mobilecellnetwork.network.ClientEmergencyDispatchCache::onClientLogin);
+            NeoForge.EVENT_BUS.addListener(
+                    com.example.mobilecellnetwork.network.ClientEmergencyDispatchCache::onClientLogout);
+        }
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
-            com.example.mobilecellnetwork.block.TestTowerGeometry.prepare();
             NetworkHandler.init();
             ChatInterceptor.init();
             VoiceManager.init();

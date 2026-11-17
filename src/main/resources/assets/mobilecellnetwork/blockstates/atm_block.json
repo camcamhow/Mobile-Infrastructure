@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "mobilecellnetwork:block/atm_block"
+    }
+  }
+}

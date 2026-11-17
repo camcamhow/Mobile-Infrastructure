@@ -19,16 +19,9 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.COPPER_ANTENNA.get());
                         output.accept(ModItems.IRON_ANTENNA.get());
                         output.accept(ModItems.DIAMOND_ANTENNA.get());
-                        output.accept(ModItems.MONOPOLE_TOWER.get());
-                        output.accept(ModItems.TOWER_TIER_1.get());
-                        output.accept(ModItems.TOWER_TIER_2.get());
                         output.accept(ModItems.TEST_ANTENNA.get());
                         output.accept(ModItems.SERVER_BLOCK.get());
                         output.accept(ModItems.SIGNAL_BOOSTER.get());
-                        output.accept(ModItems.POWER_TAP.get());
-                        output.accept(ModItems.RADIO_MODULE.get());
-                        output.accept(ModItems.POWER_CABLE_SPOOL.get());
-                        output.accept(ModItems.TECHNICIAN_TESTER.get());
                         output.accept(ModItems.ATM_BLOCK.get());
                         output.accept(ModItems.SHOP_TERMINAL_BLOCK.get());
                         output.accept(ModItems.PHONE_CHARGER.get());

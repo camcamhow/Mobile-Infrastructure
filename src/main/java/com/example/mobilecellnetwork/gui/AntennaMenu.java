@@ -2,8 +2,6 @@ package com.example.mobilecellnetwork.gui;
 
 import com.example.mobilecellnetwork.blockentity.AntennaBlockEntity;
 import com.example.mobilecellnetwork.registry.ModMenus;
-import com.example.mobilecellnetwork.block.TowerCabinets;
-import com.example.mobilecellnetwork.blockentity.TestAntennaBlockEntity;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -16,7 +14,6 @@ public class AntennaMenu extends AbstractContainerMenu {
     private final AntennaBlockEntity antenna;
     private final BlockPos blockPos;
     private final ContainerData data;
-    private int terminalIndex = -1;
 
     public AntennaMenu(int containerId, Inventory inventory) {
         this(containerId, inventory, null, BlockPos.ZERO);
@@ -26,19 +23,11 @@ public class AntennaMenu extends AbstractContainerMenu {
         this(containerId, inventory, antenna, antenna == null ? BlockPos.ZERO : antenna.getBlockPos());
     }
 
-    public AntennaMenu(int containerId, Inventory inventory, TestAntennaBlockEntity antenna, int terminalIndex) {
-        this(containerId, inventory, antenna);
-        if (!antenna.variant().hasTerminal(terminalIndex)) {
-            throw new IllegalArgumentException("Invalid tower terminal: " + terminalIndex);
-        }
-        this.terminalIndex = terminalIndex;
-    }
-
     private AntennaMenu(int containerId, Inventory inventory, AntennaBlockEntity antenna, BlockPos blockPos) {
         super(ModMenus.ANTENNA_MENU.get(), containerId);
         this.antenna = antenna;
         this.blockPos = blockPos.immutable();
-        this.data = antenna == null ? new SimpleContainerData(12) : new ContainerData() {
+        this.data = antenna == null ? new SimpleContainerData(11) : new ContainerData() {
             @Override
             public int get(int index) {
                 int energy = antenna.getEnergyStored();
@@ -55,8 +44,7 @@ public class AntennaMenu extends AbstractContainerMenu {
                     case 7 -> antenna.getTier().ordinal();
                     case 8 -> antenna.getUserSet().size();
                     case 9 -> antenna.isChunkLoadedByAntenna() ? 1 : 0;
-                    case 10 -> antenna.getRange();
-                    case 11 -> antenna.installation().status().ordinal();
+                    case 10 -> antenna.getTier().range();
                     default -> 0;
                 };
             }
@@ -67,7 +55,7 @@ public class AntennaMenu extends AbstractContainerMenu {
 
             @Override
             public int getCount() {
-                return 12;
+                return 11;
             }
         };
         addDataSlots(data);
@@ -88,13 +76,6 @@ public class AntennaMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        if (antenna != null && terminalIndex >= 0) {
-            return !antenna.isRemoved() && antenna.getLevel() == player.level()
-                    && antenna instanceof TestAntennaBlockEntity tower && tower.isWideTower()
-                    && TowerCabinets.withinTerminalRange(player.position(),
-                            tower.variant().toWorld(TowerCabinets.bounds(tower.variant(), terminalIndex, true).getCenter())
-                                    .add(blockPos.getX(), blockPos.getY(), blockPos.getZ()));
-        }
         return antenna == null || antenna.isRemoved()
                 ? player.level().getBlockEntity(blockPos) instanceof AntennaBlockEntity
                 : antenna.getLevel() == player.level()

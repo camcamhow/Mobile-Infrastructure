@@ -1,7 +1,6 @@
 package com.example.mobilecellnetwork.network;
 
 import com.example.mobilecellnetwork.voice.CallSession;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 public final class ClientCallCache {
     private static volatile String sessionId = "";
@@ -11,7 +10,6 @@ public final class ClientCallCache {
     private static volatile long startedAtMillis;
     private static volatile boolean muted;
     private static volatile boolean incoming;
-    private static volatile boolean videoCall;
     private static volatile long updatedAtMillis;
 
     private ClientCallCache() {
@@ -25,7 +23,6 @@ public final class ClientCallCache {
         startedAtMillis = packet.startedAtMillis();
         muted = packet.muted();
         incoming = packet.incoming();
-        videoCall = packet.videoCall();
         updatedAtMillis = System.currentTimeMillis();
     }
 
@@ -36,16 +33,7 @@ public final class ClientCallCache {
     public static long startedAtMillis() { return startedAtMillis; }
     public static boolean muted() { return muted; }
     public static boolean incoming() { return incoming; }
-    public static boolean videoCall() { return videoCall; }
     public static long updatedAtMillis() { return updatedAtMillis; }
-
-    public static void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
-        clearSensitiveData();
-    }
-
-    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        clearSensitiveData();
-    }
 
     public static void clearSensitiveData() {
         sessionId = "";
@@ -55,7 +43,5 @@ public final class ClientCallCache {
         startedAtMillis = 0L;
         muted = false;
         incoming = false;
-        videoCall = false;
-        updatedAtMillis = 0L;
     }
 }

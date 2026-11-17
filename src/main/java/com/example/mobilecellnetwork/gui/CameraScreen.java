@@ -4,7 +4,6 @@ import com.example.mobilecellnetwork.network.ClientSocialImageCache;
 import com.example.mobilecellnetwork.gui.theme.McnPrimitives;
 import com.example.mobilecellnetwork.gui.theme.McnTheme;
 import java.io.IOException;
-import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -26,12 +25,7 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
     private boolean captureRequested;
     private boolean capturePending;
     private boolean previewReady;
-    private boolean selfie;
-    private CameraType originalCamera;
-    private CameraType rearCamera;
-    private CameraType managedCamera;
-    private double rearZoom = 1.0D;
-    private double selfieZoom = 2.0D;
+    private double zoom = 1.0D;
 
     public CameraScreen(PhoneMenu menu) {
         super(Component.literal("Camera"));
@@ -50,14 +44,6 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
 
     @Override
     protected void init() {
-        if (minecraft != null && minecraft.player != null) {
-            if (originalCamera == null) {
-                originalCamera = minecraft.options.getCameraType();
-                selfie = originalCamera == CameraType.THIRD_PERSON_FRONT;
-                rearCamera = selfie ? CameraType.FIRST_PERSON : originalCamera;
-            }
-            applyCameraMode();
-        }
         if (com.example.mobilecellnetwork.network.ClientPhoneCache.phoneStyle() == PhoneStyle.IOS) {
             return;
         }
@@ -147,7 +133,6 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
                         previewY + (previewHeight - font.lineHeight) / McnTheme.SPACE_XXS,
                         PhoneColors.textSecondary(style));
             }
-            renderCameraSwitch(graphics, previewX, previewY, previewWidth);
             renderZoomControls(graphics, previewX, previewY + previewHeight - 22, previewWidth);
 
             graphics.drawCenteredString(font, font.plainSubstrByWidth(
@@ -183,7 +168,6 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
                     previewError.isBlank() ? "Starting live view..." : "Preview unavailable",
                     x + 102, y + 148, 0xFFFFFFFF);
         }
-        renderCameraSwitch(graphics, x + 7, y + 61, 190);
         renderZoomControls(graphics, x + 7, y + 224, 190);
         SnappleAppLayout.pill(graphics, font, x + 10, y + 31, 55, 22, "Import",
                 PhoneColors.bgSecondary(style), PhoneColors.textPrimary(style));
@@ -212,7 +196,7 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
     private void renderZoomControls(GuiGraphics graphics, int x, int y, int width) {
         int start = x + (width - ZOOM_CONTROLS_WIDTH) / 2;
         for (int i = 0; i < ZOOM_LABELS.length; i++) {
-            int color = zoom() == ZOOM_VALUES[i] ? 0xFFFFD75E : 0xFFFFFFFF;
+            int color = zoom == ZOOM_VALUES[i] ? 0xFFFFD75E : 0xFFFFFFFF;
             McnPrimitives.fillRoundedRect(graphics, start + i * ZOOM_BUTTON_STEP, y,
                     ZOOM_BUTTON_WIDTH, 18, 8, 0xC0202024);
             graphics.drawCenteredString(font, ZOOM_LABELS[i],
@@ -220,50 +204,8 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
         }
     }
 
-    private void renderCameraSwitch(GuiGraphics graphics, int x, int y, int width) {
-        int buttonX = x + width - 63;
-        McnPrimitives.fillRoundedRect(graphics, buttonX, y + 4, 59, 18, 8, 0xD0202024);
-        graphics.drawCenteredString(font, selfie ? "Front" : "Rear", buttonX + 29, y + 9,
-                capturePending ? 0xFF929292 : 0xFFFFFFFF);
-    }
-
-    private void toggleCamera() {
-        if (capturePending || minecraft == null || minecraft.player == null) {
-            return;
-        }
-        selfie = !selfie;
-        applyCameraMode();
-        previewReady = false;
-        previewGeneration++;
-        draggingViewfinder = false;
-        status = selfie ? "Front camera" : "Rear camera";
-        error = "";
-    }
-
-    private void applyCameraMode() {
-        CameraType cameraType = selfie ? CameraType.THIRD_PERSON_FRONT : rearCamera;
-        minecraft.options.setCameraType(cameraType);
-        managedCamera = cameraType;
-    }
-
-    private void setZoom(double value) {
-        if (selfie) {
-            selfieZoom = value;
-        } else {
-            rearZoom = value;
-        }
-    }
-
-    private void restoreCamera() {
-        if (minecraft != null && originalCamera != null && managedCamera != null
-                && minecraft.options.getCameraType() == managedCamera) {
-            minecraft.options.setCameraType(originalCamera);
-        }
-        managedCamera = null;
-    }
-
     double zoom() {
-        return selfie ? selfieZoom : rearZoom;
+        return zoom;
     }
 
     int previewGeneration() {
@@ -325,18 +267,6 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
         if (minecraft == null || minecraft.player == null) {
             return;
         }
-        CameraType currentCamera = minecraft.options.getCameraType();
-        if (managedCamera != null && currentCamera != managedCamera) {
-            originalCamera = currentCamera;
-            selfie = currentCamera == CameraType.THIRD_PERSON_FRONT;
-            rearCamera = selfie ? CameraType.FIRST_PERSON : currentCamera;
-            managedCamera = currentCamera;
-            previewReady = false;
-            previewGeneration++;
-            capturePending = false;
-            captureRequested = false;
-            status = "Camera perspective changed.";
-        }
         long window = minecraft.getWindow().getWindow();
         if (!minecraft.isWindowActive()) {
             return;
@@ -387,7 +317,6 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
     @Override
     public void removed() {
         draggingViewfinder = false;
-        restoreCamera();
         previewGeneration++;
         captureRequested = false;
         capturePending = false;
@@ -409,19 +338,13 @@ public final class CameraScreen extends Screen implements PhoneNavigableScreen {
         int previewY = snapple ? PhoneFrame.getScreenY(this) + 61 : layout.top() + McnTheme.SPACE_S;
         int previewWidth = snapple ? 190 : layout.width() - McnTheme.SPACE_S * McnTheme.SPACE_XXS;
         int previewHeight = snapple ? 185 : layout.viewfinderHeight() - McnTheme.SPACE_S * McnTheme.SPACE_XXS;
-        int switchX = previewX + previewWidth - 63;
-        if (button == 0 && x >= switchX && x < switchX + 59
-                && y >= previewY + 4 && y < previewY + 22) {
-            toggleCamera();
-            return true;
-        }
         int zoomStart = previewX + (previewWidth - ZOOM_CONTROLS_WIDTH) / 2;
         int zoomY = previewY + previewHeight - 22;
         if (button == 0 && y >= zoomY && y < zoomY + 18) {
             for (int i = 0; i < ZOOM_VALUES.length; i++) {
                 if (x >= zoomStart + i * ZOOM_BUTTON_STEP
                         && x < zoomStart + i * ZOOM_BUTTON_STEP + ZOOM_BUTTON_WIDTH) {
-                    setZoom(ZOOM_VALUES[i]);
+                    zoom = ZOOM_VALUES[i];
                     return true;
                 }
             }

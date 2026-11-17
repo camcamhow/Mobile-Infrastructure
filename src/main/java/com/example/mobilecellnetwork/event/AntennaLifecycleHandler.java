@@ -25,10 +25,11 @@ public final class AntennaLifecycleHandler {
         }
         BlockPos position = event.getPos();
         var state = event.getState();
-        if (state.getBlock() instanceof com.example.mobilecellnetwork.block.TestTowerSectionBlock) {
-            BlockPos base = com.example.mobilecellnetwork.block.TestTowerSectionBlock.basePosition(position, state);
+        if (state.is(com.example.mobilecellnetwork.registry.ModBlocks.TEST_TOWER_SECTION.get())) {
+            BlockPos base = position.below(state.getValue(
+                    com.example.mobilecellnetwork.block.TestTowerSectionBlock.OFFSET));
             var baseState = level.getBlockState(base);
-            if (baseState.getBlock() instanceof com.example.mobilecellnetwork.block.TestTowerBlock) {
+            if (baseState.is(com.example.mobilecellnetwork.registry.ModBlocks.TEST_ANTENNA.get())) {
                 var baseEvent = new BlockEvent.BreakEvent(level, base, baseState, event.getPlayer());
                 net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(baseEvent);
                 if (baseEvent.isCanceled()) event.setCanceled(true);

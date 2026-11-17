@@ -57,17 +57,10 @@ public final class TowerPlacementPreview {
         BlockPos target = blockHit.getBlockPos();
         Vec3 center = new Vec3(target.getX() + 0.5D, target.getY() + 0.01D, target.getZ() + 0.5D);
         int color = isOwnNetworkCoverage(level, target, player) ? GREEN : CYAN;
-        int range = heldItem.getItem() instanceof net.minecraft.world.item.BlockItem blockItem
-                && blockItem.getBlock() instanceof com.example.mobilecellnetwork.block.TestTowerBlock tower
-                ? tower.variant().range() : tier.range();
-        drawCircle(event, center, range, color);
+        drawCircle(event, center, tier.range(), color);
     }
 
     private static AntennaTier antennaTier(ItemStack stack) {
-        if (stack.getItem() instanceof net.minecraft.world.item.BlockItem item
-                && item.getBlock() instanceof com.example.mobilecellnetwork.block.TestTowerBlock tower) {
-            return tower.variant().radio();
-        }
         if (stack.is(ModItems.COPPER_ANTENNA.get())) {
             return AntennaTier.COPPER;
         }

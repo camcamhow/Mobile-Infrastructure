@@ -1,6 +1,5 @@
 {
   "variants": {
-    "wide=false": { "model": "mobilecellnetwork:block/test_antenna_base" },
-    "wide=true": { "model": "mobilecellnetwork:block/test_tower_section" }
+    "": { "model": "mobilecellnetwork:block/test_antenna" }
   }
 }

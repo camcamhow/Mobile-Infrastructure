@@ -3,9 +3,6 @@ package com.example.mobilecellnetwork.blockentity;
 import com.example.mobilecellnetwork.config.MobileCellNetworkConfig;
 import com.example.mobilecellnetwork.registry.ModBlockEntities;
 import com.example.mobilecellnetwork.registry.ModDataComponents;
-import com.example.mobilecellnetwork.infrastructure.Installation;
-import com.example.mobilecellnetwork.infrastructure.PowerWire;
-import com.example.mobilecellnetwork.infrastructure.WiredDevice;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -21,34 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
-public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStorage, WiredDevice {
-    private static final java.util.Set<PhoneChargerBlockEntity> LOADED = new java.util.HashSet<>();
-    private final Installation installation = new Installation();
-
-    @Override
-    public Installation installation() { return installation; }
-
-    public static java.util.List<PhoneChargerBlockEntity> loaded(net.minecraft.world.level.Level level) {
-        return LOADED.stream().filter(charger -> !charger.isRemoved() && charger.level == level).toList();
-    }
-
-    @Override
-    public void onLoad() {
-        super.onLoad();
-        LOADED.add(this);
-    }
-
-    @Override
-    public void setRemoved() {
-        LOADED.remove(this);
-        super.setRemoved();
-    }
-
-    @Override
-    public void onChunkUnloaded() {
-        LOADED.remove(this);
-        super.onChunkUnloaded();
-    }
+public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStorage {
     private ItemStack displayPhone = ItemStack.EMPTY;
     private String lastDisplayItem = "";
     private int displayChargePercent = -1;
@@ -125,13 +95,11 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
         tag.putString("displayItem", displayItemId());
         tag.putInt("displayChargePercent", calculateChargePercent());
         tag.putBoolean("displayPowered", energy > 0);
-        tag.put("installation", installation.save());
         return tag;
     }
 
     @Override
     public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
-        installation.load(tag.getCompound("installation"));
         ResourceLocation id = ResourceLocation.tryParse(tag.getString("displayItem"));
         var item = id == null ? null : BuiltInRegistries.ITEM.get(id);
         ItemStack stack = item == null ? ItemStack.EMPTY : new ItemStack(item);
@@ -167,9 +135,7 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
     }
 
     public void tick() {
-        if (level == null || level.isClientSide) return;
-        PowerWire.tick(this, installation, this);
-        if (level.getGameTime() % 5 != 0) {
+        if (level == null || level.isClientSide || level.getGameTime() % 5 != 0) {
             return;
         }
         ItemStack phone = itemHandler.getStackInSlot(0);
@@ -234,7 +200,6 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         energy = Math.clamp(tag.getInt("energy"), 0, getMaxEnergyStored());
-        installation.load(tag.getCompound("installation"));
         if (tag.contains("items")) {
             itemHandler.deserializeNBT(registries, tag.getCompound("items"));
         }
@@ -247,7 +212,6 @@ public class PhoneChargerBlockEntity extends BlockEntity implements IEnergyStora
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putInt("energy", energy);
-        tag.put("installation", installation.save());
         tag.put("items", itemHandler.serializeNBT(registries));
     }
 }

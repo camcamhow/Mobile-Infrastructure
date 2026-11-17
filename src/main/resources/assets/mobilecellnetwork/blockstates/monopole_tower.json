@@ -1,6 +1,0 @@
-{
-  "variants": {
-    "wide=false": { "model": "mobilecellnetwork:block/test_tower_section" },
-    "wide=true": { "model": "mobilecellnetwork:block/test_tower_section" }
-  }
-}

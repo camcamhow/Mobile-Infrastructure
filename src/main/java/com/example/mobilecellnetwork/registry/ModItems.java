@@ -11,17 +11,6 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 
 public final class ModItems {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MobileCellNetwork.MOD_ID);
-    public static final DeferredHolder<Item, BlockItem> POWER_TAP = ITEMS.register("power_tap",
-            () -> new BlockItem(ModBlocks.POWER_TAP.get(), new Item.Properties()));
-    public static final DeferredHolder<Item, com.example.mobilecellnetwork.item.TechnicianItem> RADIO_MODULE =
-            ITEMS.register("radio_module", () -> new com.example.mobilecellnetwork.item.TechnicianItem(
-                    new Item.Properties(), com.example.mobilecellnetwork.item.TechnicianItem.Tool.MODULE));
-    public static final DeferredHolder<Item, com.example.mobilecellnetwork.item.TechnicianItem> POWER_CABLE_SPOOL =
-            ITEMS.register("power_cable_spool", () -> new com.example.mobilecellnetwork.item.TechnicianItem(
-                    new Item.Properties().durability(256), com.example.mobilecellnetwork.item.TechnicianItem.Tool.SPOOL));
-    public static final DeferredHolder<Item, com.example.mobilecellnetwork.item.TechnicianItem> TECHNICIAN_TESTER =
-            ITEMS.register("technician_tester", () -> new com.example.mobilecellnetwork.item.TechnicianItem(
-                    new Item.Properties().stacksTo(1), com.example.mobilecellnetwork.item.TechnicianItem.Tool.TESTER));
 
     public static final DeferredHolder<Item, BlockItem> COPPER_ANTENNA = ITEMS.register(
             "copper_antenna", () -> new BlockItem(ModBlocks.COPPER_ANTENNA.get(), new Item.Properties()));
@@ -31,12 +20,6 @@ public final class ModItems {
             "diamond_antenna", () -> new BlockItem(ModBlocks.DIAMOND_ANTENNA.get(), new Item.Properties()));
     public static final DeferredHolder<Item, BlockItem> TEST_ANTENNA = ITEMS.register(
             "test_antenna", () -> new BlockItem(ModBlocks.TEST_ANTENNA.get(), new Item.Properties()));
-    public static final DeferredHolder<Item, BlockItem> TOWER_TIER_1 = ITEMS.register(
-            "tower_tier_1", () -> new BlockItem(ModBlocks.TOWER_TIER_1.get(), new Item.Properties()));
-    public static final DeferredHolder<Item, BlockItem> MONOPOLE_TOWER = ITEMS.register(
-            "monopole_tower", () -> new BlockItem(ModBlocks.MONOPOLE_TOWER.get(), new Item.Properties()));
-    public static final DeferredHolder<Item, BlockItem> TOWER_TIER_2 = ITEMS.register(
-            "tower_tier_2", () -> new BlockItem(ModBlocks.TOWER_TIER_2.get(), new Item.Properties()));
     public static final DeferredHolder<Item, BlockItem> SERVER_BLOCK = ITEMS.register(
             "server_block", () -> new BlockItem(ModBlocks.SERVER_BLOCK.get(), new Item.Properties()));
     public static final DeferredHolder<Item, BlockItem> SIGNAL_BOOSTER = ITEMS.register(
