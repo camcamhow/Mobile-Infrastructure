@@ -1,7 +1,0 @@
-{
-  "loader": "neoforge:separate_transforms",
-  "base": { "parent": "mobilecellnetwork:block/signal_booster" },
-  "perspectives": {
-    "gui": { "parent": "minecraft:item/generated", "textures": { "layer0": "mobilecellnetwork:item/signal_booster_icon" } }
-  }
-}
