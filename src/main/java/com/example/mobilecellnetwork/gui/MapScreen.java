@@ -346,7 +346,7 @@ public final class MapScreen extends Screen implements PhoneNavigableScreen {
                     if (column < 0 || column >= COLUMNS || row < 0 || row >= ROWS) {
                         continue;
                     }
-                    int color = switch (antenna.getTier().maxSignalTier()) {
+                    int color = switch (antenna.getMaxSignalTier()) {
                         case FIVE_G_PLUS, FIVE_G -> 0xFF3CDD6B;
                         case FOUR_G_PLUS, FOUR_G, LTE -> 0xFFFFD447;
                         case THREE_G, H_PLUS, H -> 0xFFFF9638;

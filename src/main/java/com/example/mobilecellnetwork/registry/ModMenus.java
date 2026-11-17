@@ -6,6 +6,7 @@ import com.example.mobilecellnetwork.gui.EmergencyDispatchMenu;
 import com.example.mobilecellnetwork.gui.PhoneChargerMenu;
 import com.example.mobilecellnetwork.gui.PhoneMenu;
 import com.example.mobilecellnetwork.gui.ServerMenu;
+import com.example.mobilecellnetwork.gui.SignalBoosterMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -20,6 +21,8 @@ public final class ModMenus {
             MENUS.register("phone", () -> new MenuType<>(PhoneMenu::new, net.minecraft.world.flag.FeatureFlags.DEFAULT_FLAGS));
     public static final DeferredHolder<MenuType<?>, MenuType<AntennaMenu>> ANTENNA_MENU =
             MENUS.register("antenna", () -> IMenuTypeExtension.create(AntennaMenu::fromNetwork));
+    public static final DeferredHolder<MenuType<?>, MenuType<SignalBoosterMenu>> SIGNAL_BOOSTER_MENU =
+            MENUS.register("signal_booster", () -> IMenuTypeExtension.create(SignalBoosterMenu::fromNetwork));
     public static final DeferredHolder<MenuType<?>, MenuType<PhoneChargerMenu>> PHONE_CHARGER_MENU =
             MENUS.register("phone_charger", () -> IMenuTypeExtension.create(PhoneChargerMenu::fromNetwork));
     public static final DeferredHolder<MenuType<?>, MenuType<ServerMenu>> SERVER_MENU =

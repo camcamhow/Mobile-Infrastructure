@@ -1,5 +1,6 @@
 package com.example.mobilecellnetwork.network;
 
+import com.example.mobilecellnetwork.client.ClientPayloadHandlers;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.minecraft.network.chat.Component;
@@ -76,49 +77,18 @@ public final class NetworkHandler {
                     }
                 }));
         registrar.playToClient(PhoneDeviceStatePacket.TYPE, PhoneDeviceStatePacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> {
-                    java.util.UUID priorPhoneId = PhoneDeviceClientCache.phoneId();
-                    if (packet.clearSensitiveData() || packet.lockedAll()) {
-                        clearClientPhoneData();
-                    } else if (!java.util.Objects.equals(priorPhoneId, packet.phoneId())) {
-                        clearClientPhoneData();
-                    }
-                    if (packet.lockedBank()) {
-                        ClientBankAccountCache.clearSensitiveData();
-                        ClientPlanCache.clearSensitiveData();
-                    }
-                    PhoneDeviceClientCache.update(packet);
-                    ClientPhoneCache.setAppearance(packet.appearance());
-                    com.example.mobilecellnetwork.gui.PhonePhotoLibrary.setActivePhoneId(packet.phoneId());
-                    var current = net.minecraft.client.Minecraft.getInstance().screen;
-                    if (!packet.setupComplete() && !packet.lockedAll()
-                            && current instanceof com.example.mobilecellnetwork.gui.DeviceSettingsScreen phoneScreen) {
-                        net.minecraft.client.Minecraft.getInstance().setScreen(
-                                new com.example.mobilecellnetwork.gui.PhoneSetupScreen(phoneScreen.phoneMenu()));
-                    } else if (packet.setupComplete()
-                            && current instanceof com.example.mobilecellnetwork.gui.PhoneSetupScreen setup) {
-                        setup.completed();
-                    }
-                    if (packet.lockedAll() && current instanceof com.example.mobilecellnetwork.gui.PhoneNavigableScreen phoneScreen
-                            && phoneScreen.phoneMenu() != null) {
-                        net.minecraft.client.Minecraft.getInstance().setScreen(
-                                new com.example.mobilecellnetwork.gui.LockScreen(phoneScreen.phoneMenu()));
-                    }
-                }));
+                (packet, context) -> context.enqueueWork(() -> ClientPayloadHandlers.updatePhoneDevice(packet)));
         registrar.playToClient(PhonePinResultPacket.TYPE, PhonePinResultPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> PhoneDeviceClientCache.recordPinResult(packet)));
         registrar.playToClient(PhonePhotoListPacket.TYPE, PhonePhotoListPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
-                        com.example.mobilecellnetwork.gui.PhonePhotoLibrary.replacePhonePhotos(
-                                packet.phoneId(), packet.names())));
+                        ClientPayloadHandlers.replacePhotos(packet)));
         registrar.playToClient(PhonePhotoPayloadPacket.TYPE, PhonePhotoPayloadPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
-                        com.example.mobilecellnetwork.gui.PhonePhotoLibrary.saveRemotePhoto(
-                                packet.phoneId(), packet.name(), packet.image())));
+                        ClientPayloadHandlers.savePhoto(packet)));
         registrar.playToClient(PhonePhotoDeletedPacket.TYPE, PhonePhotoDeletedPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
-                        com.example.mobilecellnetwork.gui.PhonePhotoLibrary.removeRemotePhoto(
-                                packet.phoneId(), packet.name())));
+                        ClientPayloadHandlers.removePhoto(packet)));
         registrar.playToClient(KnownPhoneDevicesPacket.TYPE, KnownPhoneDevicesPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> PhoneDeviceClientCache.updateDevices(packet)));
         registrar.playToServer(UnlockPhonePacket.TYPE, UnlockPhonePacket.STREAM_CODEC,
@@ -199,13 +169,13 @@ public final class NetworkHandler {
                 (packet, context) -> context.enqueueWork(() -> handleAntennaUnshare(context.player(), packet)));
         registrar.playBidirectional(RoamingProposalPacket.TYPE, RoamingProposalPacket.STREAM_CODEC,
                 new net.neoforged.neoforge.network.handling.DirectionalPayloadHandler<>(
-                        (packet, context) -> context.enqueueWork(() -> handleClientRoamingProposal(packet)),
+                        (packet, context) -> context.enqueueWork(() -> ClientPayloadHandlers.roamingProposal(packet)),
                         (packet, context) -> context.enqueueWork(() ->
                                 handleRoamingProposal(context.player(), packet))));
         registrar.playToServer(RoamingProposalResponsePacket.TYPE, RoamingProposalResponsePacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleRoamingProposalResponse(context.player(), packet)));
         registrar.playToClient(RoamingAgreementSyncPacket.TYPE, RoamingAgreementSyncPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> handleClientRoamingAgreements(packet)));
+                (packet, context) -> context.enqueueWork(() -> ClientPayloadHandlers.roamingAgreements(packet)));
         registrar.playToServer(RevokeAgreementPacket.TYPE, RevokeAgreementPacket.STREAM_CODEC,
                         (packet, context) -> context.enqueueWork(() -> {
                             System.out.println("[MCN] Received " + packet.type().id() + " from " + context.player().getName().getString());
@@ -231,17 +201,7 @@ public final class NetworkHandler {
         registrar.playToClient(ServerAdminDataPacket.TYPE, ServerAdminDataPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ClientServerAdminCache.update(packet)));
         registrar.playToClient(NetworkCreationResultPacket.TYPE, NetworkCreationResultPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> {
-                    if (net.minecraft.client.Minecraft.getInstance().screen
-                            instanceof com.example.mobilecellnetwork.gui.NetworkEditorScreen editor) {
-                        editor.creationResult(packet.success(), packet.message());
-                    }
-                    if (packet.success()) {
-                        com.example.mobilecellnetwork.gui.admin.AdminToast.success(packet.message());
-                    } else {
-                        com.example.mobilecellnetwork.gui.admin.AdminToast.error(packet.message());
-                    }
-                }));
+                (packet, context) -> context.enqueueWork(() -> ClientPayloadHandlers.networkCreationResult(packet)));
         registrar.playToClient(SmsDataSyncPacket.TYPE, SmsDataSyncPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ClientSmsCache.update(packet)));
         registrar.playToClient(ChatListSyncPacket.TYPE, ChatListSyncPacket.STREAM_CODEC,
@@ -278,11 +238,11 @@ public final class NetworkHandler {
         registrar.playToServer(CallControlPacket.TYPE, CallControlPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> handleCallControl(context.player(), packet)));
         registrar.playToClient(CallStatePacket.TYPE, CallStatePacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> ClientCallCache.update(packet)));
+                (packet, context) -> context.enqueueWork(() -> ClientPayloadHandlers.updateCall(packet)));
         registrar.playBidirectional(VideoCallPacket.TYPE, VideoCallPacket.STREAM_CODEC,
                 new net.neoforged.neoforge.network.handling.DirectionalPayloadHandler<>(
                         (packet, context) -> context.enqueueWork(() ->
-                                com.example.mobilecellnetwork.gui.VideoCallClient.receive(packet)),
+                                ClientPayloadHandlers.receiveVideo(packet)),
                         (packet, context) -> context.enqueueWork(() -> {
                             if (context.player() instanceof ServerPlayer player) CallManager.handleVideo(player, packet);
                         })));
@@ -416,23 +376,7 @@ public final class NetworkHandler {
         registrar.playToClient(PhoneDiedPacket.TYPE, PhoneDiedPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() -> ClientPhoneCache.setPhoneDead(true)));
         registrar.playToClient(PhoneNotificationPacket.TYPE, PhoneNotificationPacket.STREAM_CODEC,
-                (packet, context) -> context.enqueueWork(() -> {
-                    if (packet.lowPowerPrompt()) {
-                        net.minecraft.client.Minecraft.getInstance().setScreen(
-                                new com.example.mobilecellnetwork.gui.LowPowerPromptScreen(packet.title(), packet.message()));
-                    } else if (net.minecraft.client.Minecraft.getInstance().player != null) {
-                        if ("Plan editor".equals(packet.title())
-                                && net.minecraft.client.Minecraft.getInstance().screen
-                                instanceof com.example.mobilecellnetwork.gui.EditPlanModal editor) {
-                            editor.saveResult("Plan saved.".equals(packet.message()), packet.message());
-                        } else if ("Plan selection".equals(packet.title())
-                                && net.minecraft.client.Minecraft.getInstance().screen
-                                instanceof com.example.mobilecellnetwork.gui.PlanScreen screen) {
-                            screen.selectionResult(packet.message());
-                        }
-                        ClientSmsCache.addToast(packet.title(), packet.message());
-                    }
-                }));
+                (packet, context) -> context.enqueueWork(() -> ClientPayloadHandlers.notifyPhone(packet)));
         registrar.playToServer(CreateNetworkPacket.TYPE, CreateNetworkPacket.STREAM_CODEC,
                 (packet, context) -> context.enqueueWork(() ->
                         ServerAdminHandler.createNetwork(context.player(), packet.name(), packet.password())));
@@ -897,29 +841,6 @@ public final class NetworkHandler {
         notifyPlayer(player, "Tower preference updated.");
     }
 
-    private static void handleClientRoamingProposal(RoamingProposalPacket packet) {
-        ClientRoamingCache.updateProposal(packet);
-        if (net.minecraft.client.Minecraft.getInstance().screen
-                instanceof com.example.mobilecellnetwork.gui.ServerBlockScreen screen
-                && screen.isRoamingTabSelected()) {
-            screen.refreshRoamingTab();
-        } else {
-            ClientSmsCache.addToast("Roaming request", packet.message().isBlank()
-                    ? "New roaming proposal received." : packet.message());
-        }
-    }
-
-    private static void handleClientRoamingAgreements(RoamingAgreementSyncPacket packet) {
-        ClientRoamingCache.updateAgreements(packet.networkId(), packet.agreements());
-        if (net.minecraft.client.Minecraft.getInstance().screen
-                instanceof com.example.mobilecellnetwork.gui.ServerBlockScreen screen
-                && screen.isRoamingTabSelected()) {
-            screen.refreshRoamingTab();
-        } else {
-            ClientSmsCache.addToast("Roaming", "Roaming agreements updated.");
-        }
-    }
-
     private static void requestPhoneData(net.minecraft.world.entity.player.Player sender) {
         if (!(sender instanceof ServerPlayer player) || !hasPhoneMenu(player)) {
             return;
@@ -1005,7 +926,7 @@ public final class NetworkHandler {
             player.displayClientMessage(Component.literal("Emergency calling is not implemented yet."), false);
             return;
         }
-        CallManager.startCall(player, packet.number());
+        CallManager.startCall(player, packet.number(), packet.videoCall());
     }
 
     private static void handleCallControl(
@@ -1350,7 +1271,6 @@ public final class NetworkHandler {
             ClientChatCache.clearSensitiveData();
             ClientCallLogCache.clearSensitiveData();
             ClientBankAccountCache.clearSensitiveData();
-            ClientCallCache.clearSensitiveData();
             ClientSocialCache.clearSensitiveData();
             ClientSocialProfileCache.clearSensitiveData();
             ClientSocialImageCache.clearSensitiveData();
@@ -2216,6 +2136,7 @@ public final class NetworkHandler {
                 receiverData.getChats().add(receiverChat);
             }
             receiverChat.addMessage(message);
+            notifyIncomingText(recipient, message.senderNumber(), message.timestamp());
             if (PhoneDeviceService.isSessionUnlocked(recipient)) {
                 PacketDistributor.sendToPlayer(recipient, new SmsReceivePacket(chatId, message));
             }
@@ -2305,9 +2226,7 @@ public final class NetworkHandler {
             PhoneData receiverData = receiver.getData(ModCapabilities.PHONE_DATA);
             receiverData.addMessage(receiverData.getInbox(), received,
                     MobileCellNetworkConfig.MAX_MESSAGES_PER_THREAD.get());
-            receiverData.getNotifications().add(new PhoneData.Notification("SMS", "SMS from "
-                    + senderData.getPhoneNumber(),
-                    MapPointShare.displayText(packet.message(), senderData.getPhoneNumber()), now, false));
+            notifyIncomingText(receiver, senderData.getPhoneNumber(), now);
             if (PhoneDeviceService.isSessionUnlocked(receiver)) {
                 PacketDistributor.sendToPlayer(receiver,
                         new SmsReceivePacket(SmsDataSyncPacket.MessageEntry.from(received)));
@@ -2316,9 +2235,6 @@ public final class NetworkHandler {
             if (MapPointShare.isShare(packet.message())) {
                 syncMapPoints(receiver);
             }
-            PacketDistributor.sendToPlayer(receiver, new PhoneNotificationPacket(
-                    "SMS", "New message", "SMS from " + senderData.getPhoneNumber(), false));
-            playSmsNotificationSound(receiver);
         }
         usage.setTextsUsed(usage.getTextsUsed() + 1);
         if (maximumTexts > 0 && usage.getTextsUsed() >= Math.ceil(maximumTexts * 0.9D)
@@ -2336,15 +2252,11 @@ public final class NetworkHandler {
         for (PhoneData.Message message : savedData.takePendingSms(player.getUUID())) {
             phoneData.addMessage(phoneData.getInbox(), message,
                     MobileCellNetworkConfig.MAX_MESSAGES_PER_THREAD.get());
-            phoneData.getNotifications().add(new PhoneData.Notification("SMS", "New message",
-                    "SMS from " + message.senderNumber(), message.timestamp(), false));
+            notifyIncomingText(player, message.senderNumber(), message.timestamp());
             PacketDistributor.sendToPlayer(player, new SmsReceivePacket(SmsDataSyncPacket.MessageEntry.from(message)));
             if (MapPointShare.isShare(message.body())) {
                 syncMapPoints(player);
             }
-            PacketDistributor.sendToPlayer(player, new PhoneNotificationPacket(
-                    "SMS", "New message", "SMS from " + message.senderNumber(), false));
-            playSmsNotificationSound(player);
         }
         for (NetworkSavedData.PendingCall pending : savedData.takePendingCalls(player.getUUID())) {
             if (pending.missed()) {
@@ -2383,20 +2295,28 @@ public final class NetworkHandler {
                 PhoneData data = recipient.getData(ModCapabilities.PHONE_DATA);
                 data.addMessage(data.getInbox(), received,
                         MobileCellNetworkConfig.MAX_MESSAGES_PER_THREAD.get());
-                data.getNotifications().add(new PhoneData.Notification(
-                        "SMS", "New message", "SMS from " + senderNumber, timestamp, false));
+                notifyIncomingText(recipient, senderNumber, timestamp);
                 if (PhoneDeviceService.isSessionUnlocked(recipient)) {
                     PacketDistributor.sendToPlayer(recipient,
                             new SmsReceivePacket(SmsDataSyncPacket.MessageEntry.from(received)));
-                    PacketDistributor.sendToPlayer(recipient, new PhoneNotificationPacket(
-                            "SMS", "New message", "SMS from " + senderNumber, false));
                 }
-                playSmsNotificationSound(recipient);
                 sendPhoneData(recipient);
             }
             delivered++;
         }
         return delivered;
+    }
+
+    private static void notifyIncomingText(ServerPlayer player, String senderNumber, long timestamp) {
+        PhoneData data = player.getData(ModCapabilities.PHONE_DATA);
+        String message = "SMS from " + senderNumber;
+        data.getNotifications().add(new PhoneData.Notification("SMS", "New message", message, timestamp, false));
+        PhoneDeviceService.sendState(player);
+        if (data.getAppNotifications().getOrDefault("sms", true)) {
+            PacketDistributor.sendToPlayer(player,
+                    new PhoneNotificationPacket("SMS", "New message", message, false));
+        }
+        playSmsNotificationSound(player);
     }
 
     private static void playSmsNotificationSound(ServerPlayer player) {

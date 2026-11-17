@@ -1,14 +1,9 @@
 package com.example.mobilecellnetwork.network;
 
-import com.example.mobilecellnetwork.gui.PhoneMenu;
-import com.example.mobilecellnetwork.gui.PhoneScreen;
-import com.example.mobilecellnetwork.gui.LockScreen;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
@@ -25,27 +20,7 @@ public record OpenPhoneScreenPacket(int menuId, boolean heldView) implements Cus
         if (FMLEnvironment.dist != Dist.CLIENT) {
             return;
         }
-        context.enqueueWork(() -> {
-            var minecraft = Minecraft.getInstance();
-            if (minecraft.player != null
-                    && minecraft.player.containerMenu.containerId == packet.menuId()
-                    && minecraft.player.containerMenu instanceof PhoneMenu menu) {
-                com.example.mobilecellnetwork.gui.HeldPhoneView.setEnabled(packet.heldView());
-                NetworkHandler.clearClientPhoneData();
-                PhoneDeviceStatePacket state = PhoneDeviceClientCache.state();
-                if (state != null) {
-                    ClientPhoneCache.setAppearance(state.appearance());
-                }
-                if (state != null && !state.setupComplete() && !state.lockedAll()) {
-                    minecraft.setScreen(new com.example.mobilecellnetwork.gui.PhoneSetupScreen(menu));
-                } else if (state != null && (state.lockScreenEnabled() || state.pinSet() || state.lockedAll())) {
-                    minecraft.setScreen(new LockScreen(menu));
-                } else {
-                    PhoneDeviceClientCache.setUnlocked(true);
-                    PhoneScreen.openPhone(menu, minecraft.player.getInventory());
-                }
-            }
-        });
+        context.enqueueWork(() -> com.example.mobilecellnetwork.client.ClientPayloadHandlers.openPhone(packet));
     }
 
     @Override

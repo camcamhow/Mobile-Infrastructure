@@ -22,6 +22,7 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
     private final String number;
     private final long openedAtMillis = System.currentTimeMillis();
     private boolean speaker;
+    private boolean autoVideoRequested;
     private EditBox voicemailBox;
     private boolean voicemailSent;
     private int toneIndex;
@@ -77,6 +78,10 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
     @Override
     public void tick() {
         CallSession.State state = state();
+        if (state == CallSession.State.ACTIVE && ClientCallCache.videoCall() && !autoVideoRequested) {
+            autoVideoRequested = true;
+            VideoCallClient.toggle();
+        }
         if (state == CallSession.State.ENDED) {
             if (endedSeenAt == 0L) {
                 endedSeenAt = System.currentTimeMillis();
@@ -128,7 +133,7 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
             return "Connecting...";
         }
         return switch (state) {
-            case RINGING -> "Calling...";
+            case RINGING -> ClientCallCache.incoming() ? "Incoming call" : "Calling...";
             case ACTIVE -> formatDuration(System.currentTimeMillis() - ClientCallCache.startedAtMillis());
             case ENDED -> endedText();
         };
@@ -171,7 +176,31 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
         PhoneFrame.renderPanel(graphics, left, top, PhoneFrame.getScreenW(), PhoneFrame.getScreenH() - 24);
 
         CallSession.State state = state();
-        if (state == CallSession.State.ACTIVE) {
+        boolean videoCall = state == CallSession.State.ACTIVE && VideoCallClient.hasVideo();
+        int videoControlY = top + PhoneFrame.getScreenH() - 112;
+        if (videoCall) {
+            int videoX = left + 7;
+            int videoY = top + 2;
+            int videoWidth = PhoneFrame.getScreenW() - 14;
+            int videoHeight = PhoneFrame.getScreenH() - 30;
+            graphics.fill(videoX, videoY, videoX + videoWidth, videoY + videoHeight, 0xFF101216);
+            if (VideoCallClient.hasRemoteVideo()) {
+                VideoCallClient.drawRemote(graphics, videoX, videoY, videoWidth, videoHeight);
+                if (VideoCallClient.enabled()) {
+                    VideoCallClient.drawLocal(graphics, videoX + videoWidth - 68, videoY + 34, 60, 90);
+                }
+            } else {
+                VideoCallClient.drawLocal(graphics, videoX, videoY, videoWidth, videoHeight);
+            }
+            graphics.fill(videoX, videoY, videoX + videoWidth, videoY + 29, 0x90000000);
+            graphics.drawString(font, font.plainSubstrByWidth(title(), videoWidth - 24),
+                    videoX + 10, videoY + 7, 0xFFFFFFFF, false);
+            graphics.drawString(font, status(), videoX + 10, videoY + 17, 0xFFE0E0E0, false);
+            graphics.fill(videoX, videoY + videoHeight - 106, videoX + videoWidth,
+                    videoY + videoHeight, 0xA0000000);
+            PhoneRenderer.drawSecondaryButton(graphics, style, left + 38, videoControlY - 28, 128, 22,
+                    VideoCallClient.enabled() ? "Camera off" : "Camera on", font);
+        } else if (state == CallSession.State.ACTIVE) {
             graphics.fill(left + 14, top + 20, left + 190, top + 102, 0xFF17191D);
             VideoCallClient.drawRemote(graphics, left + 14, top + 20, 176, 82);
             PhoneRenderer.drawSecondaryButton(graphics, style, left + 38, top + 153, 128, 22,
@@ -182,17 +211,19 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
             String initial = title().isEmpty() ? "?" : title().substring(0, 1).toUpperCase(java.util.Locale.ROOT);
             graphics.drawCenteredString(font, initial, centerX, top + 68, 0xFFFFFFFF);
         }
-        graphics.drawCenteredString(font, font.plainSubstrByWidth(title(), 180), centerX, top + 110,
-                PhoneColors.textPrimary(style));
+        if (!videoCall) {
+            graphics.drawCenteredString(font, font.plainSubstrByWidth(title(), 180), centerX, top + 110,
+                    PhoneColors.textPrimary(style));
+        }
         boolean error = state == CallSession.State.ENDED && !voicemailSent;
         String status = status();
         int statusColor = error ? PhoneColors.error(style) : PhoneColors.textSecondary(style);
-        if (font.width(status) > 188) {
+        if (!videoCall && font.width(status) > 188) {
             var lines = font.split(Component.literal(status), 188);
             for (int i = 0; i < lines.size(); i++) {
                 graphics.drawCenteredString(font, lines.get(i), centerX, top + 126 + i * 11, statusColor);
             }
-        } else {
+        } else if (!videoCall) {
             graphics.drawCenteredString(font, status, centerX, top + 126, statusColor);
         }
 
@@ -208,11 +239,16 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
                 PhoneRenderer.drawPrimaryButton(graphics, style, left + 60, top + 200, 84, 22,
                         "Done", font);
             }
+        } else if (state == CallSession.State.RINGING && ClientCallCache.incoming()) {
+            PhoneRenderer.drawPrimaryButton(graphics, style, left + 22, top + 200, 74, 28,
+                    "Answer", font);
+            PhoneRenderer.drawSecondaryButton(graphics, style, left + 108, top + 200, 74, 28,
+                    "Decline", font);
         } else {
             int muteX = left + 18;
             int speakerX = left + 78;
             int endX = left + 138;
-            int y = top + 200;
+            int y = videoCall ? videoControlY : top + 200;
             boolean muted = state == CallSession.State.ACTIVE && ClientCallCache.muted();
             drawRound(graphics, style, muteX, y, muted ? PhoneColors.accent(style) : PhoneColors.bgTertiary(style),
                     "M", muted ? 0xFFFFFFFF : PhoneColors.textPrimary(style));
@@ -264,11 +300,26 @@ public final class CallScreen extends Screen implements PhoneNavigableScreen {
                     return true;
                 }
             } else {
-                if (state == CallSession.State.ACTIVE && inside(x, y, left + 38, top + 153, 128, 22)) {
+                boolean videoCall = state == CallSession.State.ACTIVE && VideoCallClient.hasVideo();
+                int cameraY = videoCall
+                        ? top + PhoneFrame.getScreenH() - 140 : top + 153;
+                if (state == CallSession.State.ACTIVE && inside(x, y, left + 38, cameraY, 128, 22)) {
                     VideoCallClient.toggle();
                     return true;
                 }
-                int by = top + 200;
+                if (state == CallSession.State.RINGING && ClientCallCache.incoming()) {
+                    if (inside(x, y, left + 22, top + 200, 74, 28)) {
+                        PacketDistributor.sendToServer(
+                                new CallControlPacket(CallControlPacket.Action.ACCEPT, false));
+                        return true;
+                    }
+                    if (inside(x, y, left + 108, top + 200, 74, 28)) {
+                        PacketDistributor.sendToServer(
+                                new CallControlPacket(CallControlPacket.Action.DECLINE, false));
+                        return true;
+                    }
+                }
+                int by = videoCall ? top + PhoneFrame.getScreenH() - 112 : top + 200;
                 if (inside(x, y, left + 18, by, BUTTON_SIZE, BUTTON_SIZE)) {
                     if (state == CallSession.State.ACTIVE) {
                         PacketDistributor.sendToServer(new CallControlPacket(
