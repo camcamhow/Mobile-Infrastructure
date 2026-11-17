@@ -1,9 +1,0 @@
-{
-  "replace": false,
-  "values": [
-    "minecraft:oak_leaves",
-    "minecraft:water",
-    "minecraft:glass",
-    "minecraft:glass_pane"
-  ]
-}
