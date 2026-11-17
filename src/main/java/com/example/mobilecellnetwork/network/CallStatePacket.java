@@ -13,7 +13,8 @@ public record CallStatePacket(
         String reason,
         long startedAtMillis,
         boolean muted,
-        boolean incoming
+        boolean incoming,
+        boolean videoCall
 ) implements CustomPacketPayload {
     public static final Type<CallStatePacket> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath("mobilecellnetwork", "call_state"));
@@ -26,6 +27,7 @@ public record CallStatePacket(
                 buffer.writeLong(packet.startedAtMillis());
                 ByteBufCodecs.BOOL.encode(buffer, packet.muted());
                 ByteBufCodecs.BOOL.encode(buffer, packet.incoming());
+                ByteBufCodecs.BOOL.encode(buffer, packet.videoCall());
             },
             buffer -> new CallStatePacket(
                     ByteBufCodecs.STRING_UTF8.decode(buffer),
@@ -33,6 +35,7 @@ public record CallStatePacket(
                     ByteBufCodecs.STRING_UTF8.decode(buffer),
                     ByteBufCodecs.STRING_UTF8.decode(buffer),
                     buffer.readLong(),
+                    ByteBufCodecs.BOOL.decode(buffer),
                     ByteBufCodecs.BOOL.decode(buffer),
                     ByteBufCodecs.BOOL.decode(buffer)));
 

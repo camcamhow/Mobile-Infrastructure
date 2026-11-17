@@ -30,7 +30,7 @@ public final class PhoneChargerRenderer implements BlockEntityRenderer<PhoneChar
         ItemStack phone = charger.getDisplayPhone();
         if (phone.isEmpty()) return;
         pose.pushPose();
-        pose.translate(0.5D, 0.23D, 0.5D);
+        pose.translate(0.5D, 0.17D, 0.5D);
         pose.mulPose(Axis.XP.rotationDegrees(90));
         pose.scale(0.65F, 0.65F, 0.65F);
         itemRenderer.renderStatic(phone, ItemDisplayContext.NONE, light, overlay, pose, buffers,

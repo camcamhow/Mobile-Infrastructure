@@ -28,6 +28,8 @@ public final class ModCapabilities {
     }
 
     public static void register(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, ModBlockEntities.POWER_TAP.get(),
+                (tap, side) -> tap.port(side));
         event.registerEntity(PhoneData.CAPABILITY, EntityType.PLAYER,
                 (player, context) -> player.getData(PHONE_DATA));
         event.registerEntity(BankAccount.CAPABILITY, EntityType.PLAYER,

@@ -1,251 +1,223 @@
 # Mobile Cell Network
 
-A comprehensive telecommunications and in-game smartphone simulation mod for **Minecraft NeoForge 1.21.1** (NeoForge 21.1.255).
+Bring smartphones and player-run cellular networks to Minecraft. Build the infrastructure, create a carrier, and stay connected through in-game phones.
 
-Mobile Cell Network introduces a realistic cellular ecosystem into Minecraft—complete with physical cell towers, realistic radio signal propagation and block attenuation, multi-carrier networks, paid roaming agreements, data-driven subscription plans, and an interactive in-game smartphone equipped with 14 functional apps.
+**Minecraft 1.21.1** · **NeoForge 21.1.255** · **Java 21**
 
----
+> **Work in progress:** Some interfaces and integrations are still being developed. Recent features have been built but need further in-game and multiplayer testing.
 
-## Table of Contents
+Tower section lighting captures its tier before Minecraft constructs block states, avoiding a startup registration crash. The build checks actual section construction and cached light values for every state of all four tiers.
 
-1. [Overview & Core Concept](#overview--core-concept)
-2. [The In-Game Smartphone](#the-in-game-smartphone)
-   - [Interface & Operating System](#interface--operating-system)
-   - [Smartphone Apps](#smartphone-apps)
-   - [Battery & Power Management](#battery--power-management)
-3. [Blocks & Infrastructure](#blocks--infrastructure)
-   - [Cell Towers (Antennas)](#cell-towers-antennas)
-   - [Server Block (Network Administration)](#server-block-network-administration)
-   - [Emergency Dispatch Console](#emergency-dispatch-console)
-   - [Phone Charger](#phone-charger)
-   - [Banking & Commercial Blocks](#banking--commercial-blocks)
-4. [Signal Propagation & Coverage Engine](#signal-propagation--coverage-engine)
-5. [Cellular Carriers & Multi-Network System](#cellular-carriers--multi-network-system)
-6. [Roaming & Inter-Carrier Agreements](#roaming--inter-carrier-agreements)
-7. [Subscription Plans & Billing](#subscription-plans--billing)
-8. [Emergency SOS System](#emergency-sos-system)
-9. [Economy & Banking](#economy--banking)
-10. [Administrator Commands & Configuration](#administrator-commands--configuration)
+Tower selection outlines cache their exact edge lists per shared section shape. This avoids repeating Minecraft's expensive voxel-edge scan every frame while aiming at a tower, especially Tier 4. Each shape's edge list is calculated once on first highlight and reused across towers.
 
----
+## Features
 
-## Overview & Core Concept
+- **Two phones:** Snapple's SnapPhone 16 and LanDriod's G24, with distinct interfaces, battery management, and customizable home screens.
+- **Phone apps:** Calls, messages, contacts, voicemail, maps, camera and selfie photos, gallery, Socials, banking, plans, settings, and an app store.
+- **Cellular infrastructure:** Network servers, antennas, signal boosters, chargers, and four creative-only tower variants.
+- **Player-run carriers:** Create networks and plans, manage subscriptions, and configure roaming between carriers.
+- **Signal and power:** Coverage varies with distance and terrain; infrastructure accepts compatible Forge Energy (FE).
+- **Hands-on installation:** Fit radio electronics, run visible power wires with a cable spool, and commission new towers and boosters with a technician tester.
+- **Emergency services:** Send an SOS with your location and review reports from an operator's dispatch console.
 
-Vanilla Minecraft relies on global chat for player communication. Mobile Cell Network replaces or supplements this with a realistic telecommunications system:
+## Installation
 
-- **Radio Towers:** Players and admins place cell towers (antennas) in the world to transmit coverage.
-- **Signal booster:** A powered booster relays an existing tower's signal within 32 blocks. It consumes 1 FE per tick, holds 10,000 FE, and accepts FE on any side. Place it where a powered, eligible tower already has reception; it cannot amplify an absent signal or relay another booster. Right-click it to check its stored power. The tower's network, plan, roaming and tier restrictions still apply.
-- **Server racks:** Sneak-place racks on top of one another to form a connected-looking stack. Each block remains a separate server with its own administration. A rack accepts FE on any side, stores 10,000 FE and consumes 1 FE per tick. Its network is offline without power or while its chunk is unloaded; the administration menu stays accessible.
-- **Infrastructure power test:** Operators can enable `/mcn powertest true` to bypass FE for all server racks, antennas (including the test tower), and boosters in this world, or use `/mcn powertest false` to restore normal power requirements. The choice persists across restarts. The existing `requireEnergy = false` configuration also bypasses these requirements; it must be true to require power. This setting does not charge phones or bypass network, plan, or roaming rules.
-- **Phone charger:** Connect FE, then right-click the pad with a SnapPhone or G24 to place it on the charger. Its current charge percentage appears above the phone. Right-click with an empty hand to retrieve it, or sneak-right-click with an empty hand to open the charger menu. The menu also opens when the empty pad is clicked without a phone.
-- **Power indicators:** Each server rack repeats three indicators on its bays: green means powered, blue means at least one network is managed, and blinking amber warns that stored FE is below 20%. The booster's green means powered, blue means power bypass is enabled, and blinking amber warns of less than 20% stored FE. All rack and booster indicators are dark without power; bypass counts as power and suppresses the low-FE warning. Antenna beacons blink when operational. The charger's indicator lights when it has stored FE, independently of the infrastructure bypass. These are visual indicators and do not illuminate nearby blocks.
-- **Physical Signal Simulation:** Radio waves diminish with distance and are attenuated or completely blocked by world terrain and blocks (glass, wood, stone, deepslate, obsidian, etc.).
-- **Smartphones:** Carrying a cellphone provides an interactive device with voice calling, messaging, digital mapping, online banking, social media, and system utilities.
-- **Player-Run Carriers:** Players can establish their own cellular companies, build towers, set subscription plans, and negotiate inter-network roaming agreements for revenue.
-- **Emergency Lifeline:** Stranded players without an active plan or cell signal can transmit emergency SOS texts that pinpoint their coordinates to first responders.
+1. Install Minecraft **1.21.1** and NeoForge **21.1.255**.
+2. Place the mod JAR in your Minecraft `mods` folder.
+3. Start Minecraft using the NeoForge profile.
 
----
+For multiplayer, install the same mod build on the server and each client. Simple Voice Chat is optional for voice-call integration; without it, calls use the existing text-call fallback.
 
-## The In-Game Smartphone
+## Quick start
 
-### Interface & Operating System
-Right-clicking the **Cellphone** item opens a custom in-game smartphone interface:
-- **Status Bar:** Displays the connected carrier (or roaming indicator), in-game time, 4-bar signal strength indicator, cellular tier badge (`E`, `E+`, `2G`, `3G`, `H`, `H+`, `4G`, `4G+`, `LTE`, `5G`, `5G+`), and battery percentage.
-- **On-Screen HUD:** While a phone is in your inventory, a compact status bar appears above the hotbar and action-bar messages without needing to open the phone UI.
-- **Phone Styles:** Switch between the dark **Samsung One UI-inspired** style and **Snapple** in Settings.
-- **Without a plan:** The home screen, Settings, contacts, camera, gallery, flashlight, and plan selection remain available. Calls, ordinary messages, app downloads, and other cellular services require an active plan and service. Emergency SMS remains available separately.
-- **Unlock:** Drag upward from the bottom of the lock screen; phones with a PIN then show the PIN keypad.
-- **Control Center:** On the Snapple home screen, drag down from the top-right status area for a translucent panel with flashlight, Low Power Mode, ringtone and Settings controls, plus phone status. Unsupported media and brightness controls are not shown.
-- **Snapple Settings:** The Snapple style uses a light, grouped settings layout; scroll to reach notification preferences. Other styles retain their existing settings layout.
-- **Appearance:** In Settings, select Appearance to switch between Light and Dark. The preference is saved with the phone in the world and synchronizes when that phone is opened. Wallpapers and camera imagery keep their own colors.
-- **Phone profile photo:** Select the profile card or Profile photo setting to open your computer's file picker and choose a PNG/JPEG, or use the Profile gallery setting to select an existing phone photo. The avatar uses a centered square crop, scaled into a circle; the original photo remains unchanged. You can also browse or enter a full path from the import screen. The image must be at most 1,000,000 bytes. The selected photo and gallery are stored with the phone in the world, so they follow the device when connecting to the same world from another computer. The server must accept the photo before it can be selected.
-- **Phone setup and reset:** New phones start with a setup flow for the device name, appearance, optional PIN and optional profile photo. Previously registered phones keep their existing settings. Under Settings > Device, factory reset erases the phone's local profile and gallery while retaining its number and plan, then starts setup again; it does not erase the original imported files or remote Socials posts.
-- **Delete phone photos:** Select an image in the phone gallery and choose Delete selected, then confirm. This removes the image from the phone's saved gallery and clears it as the phone profile photo if selected; it does not delete the original file imported from your computer or images already posted to Socials.
-- **Snapple Appearance:** The open phone uses the same 3D cellphone model as the held item, with a polished metallic frame, camera cutout, original wallpaper and icons. Phone screens use Lato typography, including input fields: medium-weight and shadow-free on light phone surfaces, and bold in dark mode, with Minecraft's font as a fallback for unsupported glyphs. Existing apps continue to use their current layouts. Lato is distributed under the SIL Open Font License; its license is included with the mod.
-- **Snapple icons:** Phone, Messages, Contacts, App Store and Settings use original designs inspired by smartphone icon references. The store catalog also uses the matching Snapple icons.
-- **Snapple apps:** App Store features a curated app card, category filters, searchable catalog, install buttons, and a draggable scrollbar when more apps are available. Contacts has a searchable alphabetical list and My Card links to phone settings. The Phone app's Calls screen includes a searchable call history and a link to voicemail. Messages has a searchable inbox, unread filter, and options for managing chats. These screens follow the phone's light or dark appearance; contacts and voicemail are also available from the Phone app.
-- **Phone item:** The original rounded 3D model uses the proportions of a 147.6 × 71.6 × 7.8 mm handset and a 6.1-inch display. The Snapple open-phone interface also matches the handset's front aspect ratio while retaining its usable height; it is not shown at physical world scale. It does not automatically move to the player's hand for camera or flashlight use.
-- **Navigation Controls:** Working Back button, Home button, and gesture indicator.
-- **Held phone view:** Hold a cellphone and press **P** (configurable in Minecraft controls) to open a compact phone interface at the edge of the screen. Press P again to close it. Movement keys remain available except while typing in a phone text field. Hold right-click outside the phone and move the mouse to look around; release it to use the cursor again. Right-click still opens the larger view. The held model is hidden while either interface is open to prevent duplicate phones; the interface is an overlay, not a texture on the held model.
-- **Held lock display:** In first person, a charged held phone shows the current time and date, plus signal and battery indicators on its screen before opening the phone.
-- **App Search:** A compact live filter at the bottom of the Snapple home screen lets players search apps by name. Hold or right-click an app to edit the home screen, drag apps to rearrange them, and select Done to finish.
-- **Animated wallpaper and home editing:** The home wallpaper has a subtle moving glow and drifting particles. With Low Power Mode off, press and hold an app for half a second, then drag it onto another app to swap their positions, including Snapple dock slots. Select Done or press Escape to finish. Tap an optional app's minus badge twice to uninstall Maps, Socials, or Bank; essential apps cannot be removed. Reinstall optional apps from the store when service is available. A paid app already purchased on that phone is free to reinstall, and its purchase and home layout are saved per phone.
-- **Multiplayer compatibility:** Client and server must run matching mod versions; this update uses phone network protocol 10.
+1. Find the **Mobile Cell Network** creative tab and take a phone, Network Server, and antenna.
+2. Place the server, open **Networks**, and create a network. In **Plans**, create a plan for that carrier.
+3. Place an antenna, install a Radio Electronics Module, wire it to an FE output with a Power Cable Spool, and use a Technician Tester to commission it. Assign it to your network.
+4. Right-click your phone, complete setup, and choose the network and plan in the **Plan** app.
+5. Stay within coverage of an eligible antenna to use cellular services.
 
-### Smartphone Apps
+Servers, antennas, and boosters accept FE from compatible mods. Operators can temporarily bypass their power requirements for testing:
 
-| App | Description & Features |
+```text
+/mcn powertest true
+/mcn powertest false
+```
+
+The bypass does not power the phone charger or grant a plan, coverage, or service. The `requireEnergy` configuration can also disable infrastructure power requirements.
+
+### Create: Electro Energetics power
+
+All powered equipment uses the standard NeoForge FE capability: copper, iron, diamond, and test-tower antennas, servers, signal boosters, phone chargers, and the Tower Power Tap. Create: Electro Energetics can supply them through its **FE converter**; no mandatory dependency or change to other FE-mod support is needed.
+
+- Set the converter to **electrical grid -> FE**, with a working Electro Energetics supply. Orient its FE side toward the receiving block (the converter supplies the block opposite its `FACING` direction).
+- **Towers and boosters:** Put a Tower Power Tap beside the converter, with one of the tap's sides or bottom at the converter's FE output. Spool-connect the tap's **top** to the equipment, install the radio module, then commission with the tester. The tower's work lights share this supply.
+- **Servers and phone chargers:** Put the block directly at the converter's FE output, or use a compatible FE cable/battery network between them. Their FE capability accepts power on any face. Chargers also accept a spool wire from the tap's top terminal; no radio module or commissioning is needed for chargers. Insert a phone to charge it.
+- The converter **pushes** FE into its neighbor. Its exposed capability reports an extraction interface but does not allow FE to be pulled out, so **do not spool-connect directly to the converter**. Use the tap or an extractable FE battery as the buffer.
+
+The tap's top is output-only; converter input must use another face. Tower section blocks and decorative cabinet surfaces are not separate FE inputs: use the tap-and-spool route for the wide tower. Phones charge in the charger; unpowered decorative blocks and technician tools do not need FE. Installation, ownership, commissioning, and normal service requirements remain unchanged.
+
+This connection method is based on the upstream [converter implementation](https://github.com/george8188625/Create-Electro-Energetics/blob/1.21.1/src/main/java/com/george_vi/electroenergetics/content/converter/ConverterDevice.java). Automated checks cover the push-only converter contract, tap buffering, and wire transfer; testing both mods together in-game is still required.
+
+### Technician installation
+
+The creative tab contains these tower variants. Tier 1 is a slim monopole with two three-sector antenna arrays, an attached ladder, and a combined ground-level power/radio cabinet and computer. Tiers 2-4 retain their accessible 5-by-5 foundations and two full-height service platforms:
+
+The monopole ladder runs along the west side, clear of the north-facing cabinet door and computer. The cabinet and computer sit forward of the pole, leaving the electronics visible when the door opens, with a rear mounting bracket and an extended foundation. Their click targets and cable socket follow the new position. Reconnect any previously installed monopole cable to move its saved endpoint to the new socket. Its ladder standoffs tie into the pole above the computer. The pole ends below the top beacon lens so its cap cannot flicker through the light.
+
+The monopole inventory/held miniature uses explicit sprite-bounded UVs to prevent tall parts sampling unrelated atlas textures. Its compact hand scale and centered hotbar view keep the full tower visible; the miniature includes the forward cabinet, computer, and red tip beacon.
+
+| Tower | Height | Palette | Base range | Highest signal tier |
+|---|---:|---|---:|---|
+| Tier 1 | 6 blocks | Weathered gray / ivory monopole | 128 blocks | 2G |
+| Tier 2 | 10 blocks | Copper / orange | 256 blocks | 3G |
+| Tier 3 | 15 blocks | Silver / blue | 512 blocks | 4G+ (no 5G) |
+| Tier 4 | 20 blocks | Existing steel / white | 1024 blocks | 5G+ |
+
+Tiers 2 and 3 place their antenna panels and mounts on the upper platform; the lower platform holds the computer with its original cabinet box underneath, plus safety railings and lights. The thin computer pedestal has been removed. Their ground power cabinets remain unchanged. Install their radio modules in the upper cabinet, not the lower computer cabinet. On the monopole, install the module in the combined ground cabinet.
+
+These are separate creative-only items, not replacements for the existing small copper/iron/diamond antennas. Existing tower registry IDs and saved installation/network state are preserved: previous Tiers 1-3 are now labeled 2-4 without changes to their ranges or signal limits. Tier 4 retains the original tower registry ID. The monopole requires a clear 3-by-3 area, six blocks tall. Terrain, power state, and subscription limits still affect reception. Static tower geometry is cached in GPU buffers; cabinet doors, indicators, and lighting remain dynamic. Headless checks verify geometry and reduced per-frame vertex construction, not an in-game FPS figure. Update both client and server to the same JAR and fully restart after adding the new tower registry entries.
+
+New antennas (including the creative test tower) and boosters start offline:
+
+1. Use a **Radio Electronics Module** on the equipment. On Tier 1, open the combined ground cabinet; on Tiers 2-3, climb to the top platform and open its blue-label radio cabinet; on Tier 4, either platform's blue-label cabinet works. Right-click with an empty hand to open the door, then use the module inside. The exposed cabinet shows the radio board, terminals, and wiring.
+2. Use a **Power Cable Spool** on the output face of a compatible FE generator or battery. A live cable preview appears at the attachment. Connect straight to the antenna/booster, or click solid block faces to add up to **16 snap points** along the route, then click the equipment to finish. On wide test towers, open the **yellow-label power cabinet** at the base with an empty hand and use the spool inside it; other tower-frame faces can be used as cable snaps.
+3. Each completed cable route can be up to **32 blocks** long and transfers up to **256 FE/tick**, limited by the source output and equipment input. A spool contains **256 cable units**; each connection consumes its full routed length rounded up, including detours. The preview turns red when over the length limit. Clicked endpoints, snap clips, and straight cable sections are saved and synchronized to clients.
+4. Supply FE, then use a **Technician Tester** on the equipment to print electrical/radio diagnostics and attempt commissioning. On wide test towers, aim inside any open cabinet. Commissioning requires electronics, a connected wire, and stored power (or power bypass); it does not require network assignment or upstream radio coverage.
+
+**Equipment cable sockets:** New spool connections automatically snap to the Tower Power Tap's top copper terminal, the rear sockets on boosters and chargers, the small antennas' base sockets, and the fixed side gland on each tower's ground power cabinet. The preview and saved connection use the same socket position; clicking elsewhere on a small device still finishes at its socket. Open the tower's base cabinet before connecting it, as before. Metal collars stay attached to the housing, and the tower gland does not move with its door. Straight connections and manually routed block-face snaps are both supported. Chargers can now receive spool power without a radio module or tester; direct FE charging still works. Existing saved cable routes retain their original clicked endpoints; disconnect and reconnect them to adopt the fixed sockets.
+
+The base cabinet door faces north (toward decreasing Z); the upper cabinets and computer screens face west, inward toward the mast-side walkway rather than the railing. Empty-hand right-click toggles each door; door state is saved and synchronized to other players. The doors open inward without blocking the walkway. Cabinet opening works on existing wide towers too, including grandfathered equipment. On legacy narrow towers, use the previous tower-section interactions. The tower-tip beacon uses a clean red lens, the feed mast stops below its support, and crossing lattice braces use separate depth layers to avoid overlapping surfaces.
+
+**Physical access and tower controls:** On lattice Tiers 2-4, enter through the framed doorway on the east side of the foundation to reach the yellow power cabinet; the front lattice remains intact. At either platform, climb above deck height, step right/east from the north-side ladder onto the transfer landing, then move forward onto the platform. Radio cabinets stay in the northeast corner, clear of the antenna panels, with their fronts facing the mast-side walkway. Stand just west to work on them; cable branches run underneath the deck to the rear, not across the work area. The ladder rungs remain solid, so do not try to walk through them. Tier 4 has a computer above each cabinet. Tiers 2-3 instead have their platform computer above a restored lower-deck cabinet box and their radio installation cabinet on the upper deck; their ground computers are unchanged. The Tier 1 monopole's computer is above its combined ground cabinet. Empty-hand right-click a screen to open tower controls, including carrier assignment. Platform terminals keep the menu open relative to the terminal, not the tower base. The screens remain available for setup and diagnostics while the transmitter is offline.
+
+**Tower work lights:** On lattice Tiers 2-4, the original **eight fixtures** remain below the platform corners, four per platform. The Tier 1 monopole has no platform lights. The extra railing and lower-mast floodlights have been removed, including their visual geometry, collision, and light emission. Existing wide towers clear the removed fixtures' saved light states within one second while loaded. The original lamps emit real **level-15** Minecraft block light (the vanilla maximum) while the tower is enabled and has stored FE, an active power state, or the infrastructure power bypass. They can light installation work before the radio is commissioned; they share the tower supply rather than adding a separate FE draw. Their lenses face downward, but vanilla block lighting spreads in all directions rather than projecting shader-style spotlight cones.
+
+The east service doorway has a continuous threshold under both jambs, foundation-mounted base shoes, and header ties to the tapered mast legs. Access openings omit whole obstructing diagonals instead of leaving cut-off brace stubs; full-width headers remain above the platform openings. Antenna support bars terminate behind the panels and meet recessed rear brackets at two heights, rather than poking through their faces. The handheld tower model has four continuous supports under its top cap.
+
+Work lights and collision geometry use shared, initialization-independent dimensions. Automated checks load both geometry-first and lights-first in separate JVMs to guard against startup failures during block registration.
+
+**Custom technician models:** The Power Cable Spool is a three-dimensional reel with insulated windings, metal hub, and exposed copper cable end. The Radio Electronics Module is a three-dimensional circuit board with chips, heat-sink fins, gold traces, and connector sockets; its item-frame view faces the components outward. Both have inventory, held-item, dropped-item, and item-frame views. Installed external cables are solid-looking insulated leads with attachment collars and snap clips, not thin line primitives. They run straight between selected attachments rather than sagging through supporting surfaces. Open cabinets show heat sinks, chips, traces, terminals, wiring, and breakers matching the installed equipment. Ladder standoffs meet full-width mast crossmembers, and every safety-cage hoop is braced to both tapered mast legs without obstructing the climbing lane or transfer landings.
+
+Static tower panels render only exposed surfaces: overlapping deck/landing sections, railing joints, and foundation plates no longer draw duplicate coplanar faces. Raised deck grip strips have their undersides embedded in the deck rather than sharing its top plane, preventing depth flicker without changing collision or access.
+
+Sneak-use the spool on equipment to cut its wire (no cable refund), or sneak-use it in the air to clear the selected starting point and all pending snaps. To choose another source, clear the current selection first. Rewiring requires commissioning again. Wires and clips are non-solid visual connections, not placeable cable blocks or a general-purpose power grid; they do not chain through other antennas or boosters. Snaps guide the route but are not electrical relays. A source must be loaded to deliver power, and buffered energy can keep equipment running when supply stops.
+
+All three technician items have survival crafting recipes and appear in the creative tab. Only an equipment owner or an operator can modify its installation. Breaking equipment loses its installed electronics and wire.
+
+Existing equipment keeps its previous behavior. The `requireInstallation` common configuration (in the coverage section) defaults to `true`; setting it to `false` skips installation requirements for subsequent placements, not equipment already awaiting installation. Power bypass skips only the FE check, not electronics, wiring, or commissioning. Existing decorative tower cable runs remain decorative; the new external power spans carry FE.
+
+### Electrical and signal tester
+
+The **Technician Tester** uses an original rounded 3D mesh, like the phones: a beveled yellow protective boot, dark molded face, recessed LCD, circular selector with raised diagonal grip, labeled buttons, four recessed input jacks, and red/black probes with curved leads. Its MCN markings identify the in-game FE/RF functions rather than pretending to measure real voltage. The detailed model appears in inventory, held, dropped, and framed views. Hold it in either hand to read its backlit physical screen; it samples once per second without spamming chat:
+
+Both probes are held against the boot by two retaining clips, with their curved leads connected to plugs seated in the COM and FE/RF jacks. The live charge gauge reacquires its render buffer after drawing LCD text, avoiding the `Not building!` crash when aiming at equipment with an energy buffer.
+
+HOLD, RANGE, and LIGHT are printed on the raised button faces, not behind them. Selector legends sit outside the dial, and jack labels sit below the sockets; the texture generator rejects labels that would be hidden by the dial or buttons.
+
+- Aim inside an open tower cabinet, or at an antenna/booster, for stored/max FE, signal percentage/tier, installation or power fault, and simulated available wire-source output (up to 256 FE/tick).
+- Aim at a power tap, server, charger, or another exposed FE port for its energy buffer. Tap readings also show available top-port output.
+- Aim elsewhere or into the air for a physical signal survey. Boosters show direct upstream radio signal at the booster; towers show signal at your location.
+- Closed cabinets and unauthorized installations display explicit instructions/errors instead of private equipment readings. The screen distinguishes idle and stale samples; stale readings are not live measurements. FE and normalized RF percentage are real game values, not invented voltage, resistance, or dBm readings.
+- The screen is part of the held meter in first person, not a separate GUI. Right-click testing still prints a detailed, persistent report in chat and attempts commissioning; sneak-use remains inspect-only.
+
+Detailed tester controls:
+
+- Use it inside an open tower cabinet (or on a regular antenna/booster) to inspect radio-module installation, commissioning state, stored/max FE, power bypass, wire validity, source availability, source buffer, and simulated available output. Tower reports include enabled/network/power state and FE draw. Normal use still attempts commissioning after the report; **sneak-use** only inspects and does not change installation state.
+- Tower reports show that tower's received signal strength **at the tester's location**, including any eligible booster relay. Booster reports show the strongest **direct upstream** tower signal **at the booster**, without chaining other boosters.
+- Use it in the air or on an unrelated block to survey the strongest loaded, enabled tower's physical radio coverage at your location. Reports show normalized **0-100% strength**, radio tier, network ID, and source tower coordinates; no signal is explicitly reported as `NO_SERVICE`. These are game-engine radio readings, not invented real-world voltage or dBm values.
+- Use it on a **Tower Power Tap**, or empty-hand right-click the tap, to inspect its energy buffer and port instructions.
+
+The meter does not require a charged phone or subscription and does not grant service, plans, or billing exemptions. Signal percentage measures physical coverage, not carrier authorization. Power-source probing simulates extraction without consuming FE; an empty/unloaded/missing source is distinguished from equipment still running on buffered energy. All radio readings still require the relevant chunks and towers to be loaded.
+
+### Tower power tap
+
+Place the craftable **Tower Power Tap** beside the tower as a small distribution cabinet:
+
+1. Feed a compatible FE generator, battery, or energy cable into its **sides or bottom**. The tap actively pulls from adjacent extractable FE outputs and also accepts pushed FE. Configure the external source's facing/output mode as needed.
+2. With the **Power Cable Spool**, select the tap's **top copper terminal**, then connect inside the tower's open base power cabinet (or to a regular antenna/booster).
+3. Use the tester to check power and commission the equipment.
+
+The tap buffers **100,000 FE**, persists energy across world reloads, and limits each input/output operation to **1,024 FE**. Tower spool wires retain their **256 FE/tick** per-wire limit and maximum **32-block** span. Multiple equipment wires can draw from a tap's shared buffer. It is not a generator: it creates no free energy, receives no energy from the power bypass, and does not pull from other taps, antennas, or boosters. Top is output-only; other faces are input-only. External sources still need compatible FE support (non-FE adapters are not included). Existing direct generator-to-tower connections remain supported. Breaking a tap drops the cabinet but loses its stored FE.
+
+## Phone controls
+
+| Action | Control |
 |---|---|
-| 📞 **Phone / Dialer** | Number keypad for dialing, Recents call log (incoming, outgoing, missed), Contacts tab, and Voicemail tab. Snapple uses a circular keypad and bottom navigation. |
-| 📲 **Call Screen** | Active call screen with call duration timer, Mute, visual Speakerphone, and End Call buttons. Integrates with Simple Voice Chat (creates temporary voice call groups) or falls back to live text-calls on HUD. Supports ringtones, busy tones, and out-of-service alerts. |
-| 📹 **In-game video calls** | On the SnapPhone, open FaceTime and select a contact or enter a number. During the resulting call, select Camera on to share your front-facing Minecraft character and surroundings; the other participant can independently turn on their camera. Existing calls can also use the camera button. Cameras start off and stop when leaving the call screen, changing perspective, or ending the call. Video sends up to four frames per second and uses both players' plan data in addition to call minutes; audio uses the existing call system. The server and both clients must use the same mod version. |
-| 💬 **SMS / Messages** | Direct messaging and group chats with unread indicators. Queues messages for offline players to deliver on login. Includes an always-pinned **Emergency (SOS)** conversation. |
-| 👥 **Contacts** | Contact book to create, edit, and delete contacts, with one-tap shortcuts to call or message. |
-| 📼 **Voicemail** | Lists voicemail entries with caller and time, supports personal notes and callbacks, and lets you delete entries from the Phone app's Voicemail tab. |
-| 🗺️ **Map** | GPS satellite navigation app featuring terrain elevation shading, player position tracking, zooming, panning, waypoint markers (POIs), and one-tap waypoint sharing over SMS. |
-| 📡 **Signal testing** | Newly placed creative-only Cell Signal Test Antennas occupy ten blocks vertically, with solid upper sections and a blinking beacon. Placement requires nine clear blocks above the base; breaking any section removes the tower. Existing towers remain unchanged until broken and replaced. Right-click the base for status and network assignment. The antenna uses the diamond antenna's configured range, tier and FE requirements; connect power to the base or enable the operator power-test bypass. Normal service requires an active plan and an assigned, online network. An operator can run `/mcn signaltest <player> true` to display nearby physical tower coverage without a plan or network selection; `/mcn signaltest <player> false` turns it off. Test readings do not grant calls, SMS, data, or bypass billing. `/mcn signal here` shows distance and sampled obstruction. Signal weakens with distance and sampled materials, but this is an approximation, not a radio simulation. |
-| 🏦 **Bank** | Mobile banking client displaying current account balance, linked bank card, direct funds transfer to other players, and full transaction history. |
-| 📊 **Plan** | Subscription management screen. Displays active plan, carrier name, remaining minutes, texts, and data allowance (MB), cycle countdown, and overage billing. Includes a two-step network and plan chooser modal to subscribe or cancel plans. |
-| ⚙️ **Settings** | Controls OS theme style (One UI vs iOS), Low Power Mode, ringtone and notification sounds, Do Not Disturb, per-app notifications, and manual **Cell Tower selection** (choose automatic best tower or pin a specific antenna). |
-| 📷 **Camera** | Move with the normal movement controls; hold right-click outside the phone and move the mouse, drag inside the viewfinder, or use arrow keys to aim. Choose 0.5x wide, 1x, 2x, 5x, or 10x zoom on the viewfinder. These change the world view while the camera is open and restore it on exit. Snapple has a shutter, Gallery, Import, and Socials controls. |
-| 🖼️ **Gallery** | Browse captured or imported photos and tap a photo to view the full image inside the phone. Return to the gallery to use the selected photo for Socials or a profile, or delete it. Snapple offers a recent collection and a scrollable library grid. |
-| 🔦 **Flashlight** | Illuminates the area ahead of the player (~7 blocks) using real-time dynamic light blocks. Discharges the battery faster while active. |
-| 🛍️ **Store** | Digital app catalog for installing optional applications. Extra Ringtones currently uses the glyph fallback because it has no PNG icon. |
-| 🌐 **Socials** | In-game social media platform with user profiles, posts, photo uploads, likes, comments, user search, and follower feeds. |
+| Open the phone | Right-click while holding it |
+| Toggle the compact held-phone view | Press **P**; configurable in Minecraft controls |
+| Unlock | Swipe up and enter your PIN if configured |
+| Edit the home screen | Press and hold an app, then drag to rearrange |
+| Switch cameras | In Camera, select **Rear** or **Front** in the viewfinder |
+| Charge a phone | Right-click a powered charger while holding it; use an empty hand to retrieve it |
 
-### Battery & Power Management
-- Phones hold an internal charge between 0 and 10,000 units.
-- Battery drains over time (`phoneDrainPerSecond`).
-- **Low Power Mode:** Reduces drain, caps the maximum signal tier at `E+`, and restricts available apps to essential services (SMS, Map, Settings). The Map renders at a reduced scale (`mapResolutionDivisor`) to save data.
-- **Phone Charger:** Recharges phones using Forge Energy (FE). Dropping or breaking the charger safely drops the inserted phone.
-- **Dead Phone:** At 0% charge, the screen turns black and displays "Phone Off" until recharged.
+Sneak-right-click a charger with an empty hand to open its menu. The charge percentage appears above an inserted phone.
 
----
+## Infrastructure at a glance
 
-## Blocks & Infrastructure
+| Block | Purpose |
+|---|---|
+| **Network Server** | Manage networks and plans. Sneak-place racks to stack them visually; each remains a separate server. |
+| **Copper, Iron, and Diamond Antennas** | Broadcast progressively higher-tier service. Range and terrain affect coverage. |
+| **Signal Booster** | Right-click with an empty hand to select a receivable carrier/network and view power, installation, and direct upstream signal. Automatically relays that carrier's strongest receivable tower within 32 blocks; it cannot create signal or relay another booster. |
+| **Tower Power Tap** | Buffered FE distribution cabinet: generator/cable inputs on sides and bottom, tower spool output at the top copper terminal. |
+| **Cell Signal Test Antenna** | Creative-only 20-block tapered steel lattice tower on a 5×5 foundation. Solid cross-braces, walkable railed platforms with widened north entrances, a climbable ladder and safety-cage detailing, bolted footings, cable runs, mounts and equipment cabinets. Reserve a clear 5×5 area, 20 blocks tall, centered on the base. Existing narrow towers keep their dimensions; replace them for the wider version. Existing wide towers receive these geometry improvements automatically. |
+| **Phone Charger** | Recharges a phone using FE; the infrastructure test bypass does not power it. |
+| **Emergency Dispatch** | Operator console for reviewing and resolving SOS reports. |
 
-### Cell Towers (Antennas)
-Antennas transmit cellular signals across a spherical coverage area:
-- **Copper Antenna (Tier 1):** Short-range, lower data tier cap, economical crafting recipe.
-- **Iron Antenna (Tier 2):** Medium-range, balanced data speeds.
-- **Diamond Antenna (Tier 3):** Long-range, maximum signal bandwidth (`5G+`).
+Server and booster indicators show power and low-energy status; the rack's blue light indicates a managed network, while the booster's blue light indicates power bypass. See the [user guide](USER_GUIDE.md) for all indicator meanings and setup details.
 
-Antenna mechanics:
-- **Power States:** Powered, Low Power, or Unpowered.
-- **Ownership & Password Claiming:** Antennas are claimed by networks using salted password verification.
-- **Antenna Sharing:** Tower owners can share their physical antenna mast with other carriers, broadcasting multiple networks from one block.
-- **Mesh Links:** Nearby antennas on the same network automatically establish mesh connections.
+The booster menu lists receivable carriers with their strongest direct signal at the booster. Click a carrier to tune it; **Rescan** refreshes the list. The selection survives restarts and remains selected if its towers become unavailable (no fallback to a different carrier). **Automatic (all carriers)** relays any eligible carrier and is the default for new and existing boosters. The menu is available without power or commissioning, but relaying still requires both. Owners and operators can configure owned installations; normal build permissions and an eight-block interaction limit apply. Phone plans, roaming, network availability, signal attenuation, and tier caps still apply. The tester follows the selected carrier when inspecting upstream signal.
 
-### Server Block (Network Administration)
-The **Server Block** acts as the central management terminal for cellular networks:
-- **Setup Workflow:** Placing a server block opens the administration interface; if the assigned network has no password, the owner is prompted to set the network name and password.
-- **Creating service:** In the server's Networks tab, choose **New Network**, enter a unique name and password, and save. The new network is attached to that server. In Plans, choose **New Plan**, enter a lowercase ID and name, set the price and allowances, and select your carrier under **Carrier and access** (a single owned network is selected automatically). Save and check the confirmation. At an antenna, select the network and save its settings so it can broadcast. A server may manage more than one network.
-- **Joining service:** Open the phone's Plan app and choose a network and one of its plans (use **Change plan** if a plan is already active). The subscription price is charged from the player's bank balance. Choosing a plan does not require existing service; calls and data still require a matching online network and antenna coverage. If a network or plan is missing, reopen or refresh the relevant screen and confirm that the carrier and plan were saved.
-- **Removing infrastructure:** Removing an antenna unregisters it and updates the network's tower count. Removing a server takes its network offline and hides it from the normal server network and roaming lists without deleting its plans or settings. Replacing a server at its previous position restores the matching network; when several unassigned networks exist and none matches the position, the owner can select **Restore** on the newly placed server. A single unassigned network is restored automatically. Older removed servers may not have their former positions recorded, so choose **Restore** if needed.
-- **Management Tabs:**
-  - **Networks:** Inspect registered networks, antenna counts, online/offline status, allow/disallow flags, and password management.
-  - **Networks and Roaming:** The server menu lists networks owned by the player. Edit their names and roaming availability, or change roaming rates and automatic requests in the Roaming tab. These actions require ownership, including for operators.
-  - **Antennas, Players, and Billing:** These server-menu sections remain unavailable. Configure antennas at their block; use available server commands for other administration.
-  - **Plans:** Network owners can search, create, edit, and delete plans belonging to their networks. Create a carrier network first, then choose **New Plan**, enter a unique lowercase plan ID and display name, scroll to **Carrier and access**, and select an owned carrier before saving. Default plans cannot be deleted or changed to a different default here. Server confirmation or errors appear in chat.
-  - **Emergency Broadcasts:** Broadcast server-wide emergency alerts to carrier phones.
+The booster menu adapts to the GUI-scaled window size, uses compact bounded text, and keeps internal carrier IDs in hover details rather than the carrier rows. A powered, commissioned booster with direct tower reception regenerates a strong local signal that falls off over 32 blocks and through obstructions; its output strength is no longer limited to the incoming percentage. Tower hardware, plan, and low-power speed caps still apply. The phone HUD and phone status use this post-booster reception, while the booster menu and tester show the incoming signal before regeneration. An incomplete installation must still be commissioned with the tester before it can boost.
 
-### Emergency Dispatch Console
-A dedicated block (`emergency_dispatch`) for operators and emergency personnel (permission level 2):
-- Receives incoming SOS messages sent over the emergency channel.
-- Displays sender name, phone number, exact coordinates (X, Y, Z), and dimension.
-- Allows first responders to mark emergencies as resolved and archive logs.
+Tower placement checks the actual foundation collision and item-use permissions throughout the footprint. The ladder stops at its physical top; its collision shapes are computed once and reused. Geometry improvements apply to existing wide towers after restarting Minecraft.
 
-### Phone Charger
-Accepts a cellphone into its cradle and recharges its battery using Forge Energy (FE).
+The handheld tower miniature uses steel, gray/light-gray concrete, and white panel textures matching the placed tower, rather than the older cyan diamond-panel palette.
 
-### Banking & Commercial Blocks
-- **ATM Block (`atm_block`):** Physical terminal for player banking, card linking, deposits, and withdrawals.
-- **Shop Terminal (`shop_terminal_block`):** Commercial payment terminal facilitating card and mobile transactions.
+Tower geometry and collision-box caches are prepared during common mod setup on clients and servers, before entering a world. This moves the expensive first-use geometry construction out of the first tower placement/render instead of weakening collision or spreading an incomplete tower over multiple ticks. Placing the 500-block structure still performs its normal clearance, permission, and neighbor updates.
 
----
+Balcony antenna support arms and mounting crossbars use the same beam definitions for rendering and collision, like the mast braces; they are not pass-through decoration.
 
-## Signal Propagation & Coverage Engine
+The cable bundle enters the base cabinet through bent leads and a gland plate, branches into both balcony equipment cabinets, and terminates inside an upper junction box.
 
-The coverage engine calculates signal strength dynamically every second for active phones:
-1. **Distance Falloff:** Uses an `INVERSE` distance model where signal strength decays relative to the antenna's configured range: `1 / (1 + 4 * distance / range)`. A cutoff at `inverseMaxRangeMultiplier * range` prevents infinite range.
-2. **Line-of-Sight Raycasting:** A ray is sampled between the player and candidate towers. Sampling cost is tuned via `losSampleInterval` and `losMaxSamples`.
-3. **Block Attenuation:** Blocks along the line of sight degrade signal according to block tags:
-   - `signal_attenuation/none`: Air and transparent blocks (0 attenuation).
-   - `signal_attenuation/low`: Foliage, wood, glass (minimal attenuation).
-   - `signal_attenuation/medium`: Dirt, stone, bricks (moderate attenuation).
-   - `signal_attenuation/high`: Concrete, deepslate, iron blocks (heavy attenuation).
-   - `signal_attenuation/blocking`: Obsidian, bedrock, reinforced shielding (blocks signal completely).
-4. **Signal Bars:** The 4-bar indicator uses continuous signal strength thresholds (defaults: 0.80, 0.55, 0.30, and >0.00).
-5. **Signal Tier Mapping:** Combined signal strength and antenna tier determine the active network tier:
-   `E` ➔ `E+` ➔ `2G` ➔ `3G` ➔ `H` ➔ `H+` ➔ `4G` ➔ `4G+` ➔ `LTE` ➔ `5G` ➔ `5G+`.
+## Useful operator commands
 
----
+| Command | Description |
+|---|---|
+| `/mcn signal here` | Inspect local signal and obstructions. |
+| `/mcn signaltest <player> <true\|false>` | Toggle test-only coverage readings for a player. |
+| `/mcn powertest <true\|false>` | Toggle the infrastructure power bypass. |
+| `/mcn plan list` | List available plans. |
+| `/mcn plan reload` | Reload data-driven plans. |
+| `/mcn network list` | List networks. |
 
-## Cellular Carriers & Multi-Network System
+These commands require operator permission. Test-only signal readings do not grant calls, messages, data, or billing exemptions. Additional commands and configuration options are in the [user guide](USER_GUIDE.md).
 
-- Players and admins can create independent carrier networks.
-- Networks feature a unique ID, custom name, owner UUID, server block coordinates, and salted password hash.
-- **No Service Gating:** Players without an active plan or roaming connection experience "No Service", which cleanly gates calling, SMS, and data apps while keeping exempt utility apps (Settings, Camera, Gallery, Flashlight) accessible.
+## Current limitations
 
----
+- The server's Antennas, Players, and Billing sections are not yet available.
+- The physical ATM and Shop Terminal interfaces are not implemented.
+- Custom app importing and non-FE power adapters are not implemented.
+- Some recent features still need in-game and multiplayer verification.
 
-## Roaming & Inter-Carrier Agreements
+## Build from source
 
-When a player leaves their home carrier's tower coverage:
-- If a foreign carrier's antenna is detected, the phone checks if the player's plan has `allowRoaming: true`.
-- Roaming requires an **active bilateral agreement** between the home network and the host network.
-- **Proposal System:**
-  - Network A sends a proposal to Network B with specified rates:
-    - Voice Rate (per minute)
-    - SMS Rate (per text)
-    - Data Rate (per megabyte)
-  - Network B can **Accept**, **Reject**, or **Counter** with updated rates.
-  - When accepted, the agreement is activated and synchronized between both networks.
-- **Revenue Sharing:** Roaming charges are deducted from the subscriber and split between the plan's home network and visited tower network. `roamingRevenueSplitHome` controls the home-network fraction (default 0.5); the visited network receives the remainder. Plan subscription and overage revenue goes to the plan carrier.
+With Java 21 installed, run the Gradle wrapper from the project directory:
 
----
+```powershell
+.\gradlew.bat build
+```
 
-## Subscription Plans & Billing
+On macOS or Linux, use `./gradlew build`. The resulting JAR is written to `build/libs/`.
 
-Plans are data-driven JSON files stored in `data/mobilecellnetwork/plans/` (reloadable with `/mcn plan reload`):
-- **Plan Parameters:**
-  - `price`: Cost deducted every billing cycle.
-  - `billingCycleDays`: Cycle duration in in-game days.
-  - `callMinutes`: Voice allowance (`-1` for unlimited).
-  - `textMessages`: SMS allowance (`-1` for unlimited).
-  - `dataAllowanceMb`: Data allowance (`-1` for unlimited).
-  - `maxSignalTier`: Maximum cellular tier permitted on the plan.
-  - `carrierNetworkId`: Carrier network operating the plan.
-  - `allowRoaming`: Whether roaming on foreign towers is allowed.
-  - `roamingMode`: `CHARGED` or `UNCHARGED`.
-  - `allowOverage`: Whether usage past allowances is permitted.
-  - `overageRatePerMinute`, `overageRatePerText`, `overageRatePerMb`: Rates applied when exceeding allowances.
-- **Hard Stop:** When `allowOverage: false` and allowances are exhausted, outgoing calls, SMS, and data apps are blocked until renewal.
-- **Recurring Billing:** Automated billing runs every 1,200 server ticks. If an account cannot pay, service is suspended or downgraded to the default plan.
-- **Currency System:** Currency formatting (defaulting to `$`, `dollar`, and `dollars`) is handled consistently across all screens via `CurrencyUtil`.
+The build includes `verifyTowerGeometry`: headless checks for climbing and descending, off-center side-landing entry and return, east-side base access, ladder-to-cabinet routes, terminal sightlines and interaction range, rendered antenna-panel clearance from cabinets and screens, landing floor support, eight corner-light emission rules, cross-brace collision, cached block-local shapes, solid ladder rungs and limits, and tower/cable renderer bounds. These checks do not replace in-game or multiplayer testing.
 
----
+The build also includes `verifyInstallations`, covering installation state, commissioning, legacy saves, persistence, rewiring, FE transfer limits, energy conservation, power-tap directional ports/buffer/simulation, booster carrier tuning/persistence/strongest-source selection and menu data serialization, tester percentage formatting, and custom 3D item model bounds, faces, texture references, and display contexts. Visual wires, item interactions, actual world-light propagation, and third-party generator compatibility still need in-game and multiplayer testing.
 
-## Emergency SOS System
+Client event registration and screen-related packet handling are isolated from common mod initialization so dedicated servers do not load Minecraft screen classes. The `verifyDedicatedServerClassloading` build check verifies the common entry point, payload registration class, phone-opening packet, and booster menu/entity with Minecraft client/rendering classes blocked. It does not replace a full dedicated-server startup or multiplayer test.
 
-- The **Emergency** SMS channel is always accessible, even without an active plan, with zero balance, or in dead zones.
-- If enabled in config (`deadPhoneAllowsEmergency`), emergency SOS can even be sent from a dead phone.
-- Emergency messages:
-  - Do not consume text quotas or bank funds.
-  - Record exact player coordinates (X, Y, Z) and dimension.
-  - Play an alert sound to online operators.
-  - Display directly inside the **Emergency Dispatch Console**.
+## Documentation
 
----
+Read the [user guide](USER_GUIDE.md) for detailed phone controls, apps, infrastructure, plans, roaming, emergency features, and administrator options.
 
-## Economy & Banking
-
-- Every player possesses a persistent bank account capability.
-- **Bank Card:** Item holding account credentials for ATM access.
-- **Transactions:** Tracks transfers, plan fees, overage charges, roaming fees, and carrier revenue payouts.
-- Offline players receive pending revenue and billing reconciliations upon logging in.
-
----
-
-## Administrator Commands & Configuration
-
-### Commands (`/mcn` - Permission Level 2)
-- `/mcn signal here`: Diagnostics for signal strength, nearest antenna, attenuation, and line-of-sight.
-- `/mcn chatlock <true|false>`: Toggles interception of vanilla chat (encouraging smartphone SMS usage).
-- `/mcn plan list|assign|reload`: Inspect, assign, or reload subscription plans.
-- `/mcn network list|create|delete|allow|disallow|owner|roaming|password|server`: Manage cellular carriers.
-- `/mcn antenna list|state|owner|forceclaim|share|unshare`: Inspect and manage physical cell towers.
-- `/mcn roaming list|propose|force-agreement|clear`: Roaming agreement administration.
-- `/mcn emergency list|clear`: View or archive emergency SOS logs.
-- `/mcn billing force|history`: Run immediate billing cycles or review transaction histories.
-- `/mcn player list|number|plan|lowpower|charge`: Manage player phone numbers, plans, power states, and battery charge.
-- `/mobilecellnumber view|set`: Quick lookup or assignment of phone numbers.
-
-### Configuration (`mobilecellnetwork-common.toml`)
-- Configurable ranges for Copper, Iron, and Diamond antennas.
-- Falloff formulas, line-of-sight sampling rates, and raycast step distances.
-- Battery drain rates, Low Power Mode multipliers, and flashlight power consumption.
-- Currency symbols and naming.
-- Default roaming rates and automatic proposal behavior.
-- Vanilla chat lock options and bypass permissions.
-- Dead phone emergency call toggles.
+The bundled Lato font is distributed under the [SIL Open Font License](src/main/resources/assets/mobilecellnetwork/font/lato-ofl.txt).

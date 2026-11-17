@@ -2,6 +2,7 @@ package com.example.mobilecellnetwork.gui;
 
 import com.example.mobilecellnetwork.blockentity.AntennaPowerState;
 import com.example.mobilecellnetwork.blockentity.AntennaTier;
+import com.example.mobilecellnetwork.infrastructure.Installation;
 import com.example.mobilecellnetwork.network.AntennaConfigActionPacket;
 import com.example.mobilecellnetwork.network.AntennaConfigSyncPacket;
 import com.example.mobilecellnetwork.network.ClientAntennaConfigCache;
@@ -36,7 +37,8 @@ public class AntennaScreen extends AbstractContainerScreen<AntennaMenu> {
 
     public AntennaScreen(AntennaMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        testTower = inventory.player.level().getBlockState(menu.getBlockPos()).is(ModBlocks.TEST_ANTENNA.get());
+        testTower = inventory.player.level().getBlockState(menu.getBlockPos()).getBlock()
+                instanceof com.example.mobilecellnetwork.block.TestTowerBlock;
         imageWidth = 300;
         imageHeight = 230;
     }
@@ -203,7 +205,12 @@ public class AntennaScreen extends AbstractContainerScreen<AntennaMenu> {
         int tierIndex = Math.clamp(menu.getDataValue(7), 0, AntennaTier.values().length - 1);
         int primary = AdminColors.TEXT_PRIMARY;
         int secondary = AdminColors.TEXT_SECONDARY;
-        graphics.drawString(font, testTower ? "TEST TOWER" : "ANTENNA CONTROL", 14, 12, primary, false);
+        String heading = "ANTENNA CONTROL";
+        if (testTower) {
+            var state = minecraft.level.getBlockState(menu.getBlockPos());
+            heading = "CELL TOWER - TIER " + com.example.mobilecellnetwork.block.TowerVariant.of(state).displayTier();
+        }
+        graphics.drawString(font, heading, 14, 12, primary, false);
         if (testTower) {
             String power = AntennaPowerState.values()[stateIndex] == AntennaPowerState.UNPOWERED
                     ? "Offline" : "Broadcasting";
@@ -212,8 +219,8 @@ public class AntennaScreen extends AbstractContainerScreen<AntennaMenu> {
             graphics.drawString(font, fit(power + "  |  " + powerSource, imageWidth - 28), 14, 48,
                     AntennaPowerState.values()[stateIndex] == AntennaPowerState.UNPOWERED
                             ? AdminColors.ERROR : AdminColors.SUCCESS, false);
-            graphics.drawString(font, "Range " + menu.getDataValue(10) + " blocks  |  Users "
-                    + menu.getDataValue(8), 14, 68, secondary, false);
+            graphics.drawString(font, fit(installationHint("Range " + menu.getDataValue(10) + " blocks  |  Users "
+                    + menu.getDataValue(8)), imageWidth - 28), 14, 68, secondary, false);
             graphics.drawString(font, "Assign a network for normal service", 14, 157, primary, false);
             AntennaConfigSyncPacket config = ClientAntennaConfigCache.snapshot();
             String hint = !configReceived ? "Loading network settings..."
@@ -237,8 +244,8 @@ public class AntennaScreen extends AbstractContainerScreen<AntennaMenu> {
                         + "  |  Tier " + AntennaTier.values()[tierIndex].name()
                         + "  |  Range " + menu.getDataValue(10), 272),
                 14, 70, primary, false);
-        graphics.drawString(font, "Users " + menu.getDataValue(8)
-                        + "  |  Chunk " + (menu.getDataValue(9) != 0 ? "loaded" : "inactive"),
+        graphics.drawString(font, fit(installationHint("Users " + menu.getDataValue(8)
+                        + "  |  Chunk " + (menu.getDataValue(9) != 0 ? "loaded" : "inactive")), imageWidth - 28),
                 14, 83, secondary, false);
         graphics.drawString(font, "Fee / minute", 110, 156, secondary, false);
         String status = agreementMatches
@@ -251,6 +258,14 @@ public class AntennaScreen extends AbstractContainerScreen<AntennaMenu> {
             graphics.drawString(font, fit("Only the antenna owner can change settings.",
                     imageWidth - 28), 14, 188, AdminColors.ERROR, false);
         }
+    }
+
+    private String installationHint(String fallback) {
+        int index = Math.clamp(menu.getDataValue(11), 0, Installation.Status.values().length - 1);
+        Installation.Status status = Installation.Status.values()[index];
+        return status == Installation.Status.READY ? fallback
+                : Component.translatable("gui.mobilecellnetwork.installation."
+                        + status.name().toLowerCase(java.util.Locale.ROOT)).getString();
     }
 
     private String fit(String text, int width) {

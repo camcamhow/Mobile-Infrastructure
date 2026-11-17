@@ -15,11 +15,25 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 
-public final class SignalBoosterBlockEntity extends BlockEntity implements IEnergyStorage {
+public final class SignalBoosterBlockEntity extends BlockEntity implements IEnergyStorage,
+        com.example.mobilecellnetwork.infrastructure.Serviceable {
+    private final com.example.mobilecellnetwork.infrastructure.Installation installation =
+            new com.example.mobilecellnetwork.infrastructure.Installation();
+
+    @Override
+    public com.example.mobilecellnetwork.infrastructure.Installation installation() { return installation; }
+
+    public static List<SignalBoosterBlockEntity> loaded(Level level) {
+        return LOADED.stream().filter(booster -> !booster.isRemoved() && booster.level == level).toList();
+    }
     public static final int RANGE = 32;
     private static final int CAPACITY = 10000;
     private static final Set<SignalBoosterBlockEntity> LOADED = new HashSet<>();
     private int energy;
+    private com.example.mobilecellnetwork.infrastructure.BoosterTuning tuning =
+            new com.example.mobilecellnetwork.infrastructure.BoosterTuning("");
+    private AntennaBlockEntity cachedUpstream;
+    private long upstreamTick = Long.MIN_VALUE;
     private long poweredTick = Long.MIN_VALUE;
     private boolean displayPowered;
     private boolean lastDisplayPowered;
@@ -33,7 +47,7 @@ public final class SignalBoosterBlockEntity extends BlockEntity implements IEner
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level != null && !level.isClientSide) LOADED.add(this);
+        LOADED.add(this);
     }
 
     @Override
@@ -57,8 +71,58 @@ public final class SignalBoosterBlockEntity extends BlockEntity implements IEner
         return Vec3.atCenterOf(worldPosition);
     }
 
+    public com.example.mobilecellnetwork.infrastructure.BoosterTuning tuning() {
+        return tuning;
+    }
+
+    public void setNetwork(String networkId) {
+        tuning = new com.example.mobilecellnetwork.infrastructure.BoosterTuning(networkId);
+        upstreamTick = Long.MIN_VALUE;
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
+    public AntennaBlockEntity upstream() {
+        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return null;
+        if (upstreamTick != level.getGameTime()) {
+            cachedUpstream = com.example.mobilecellnetwork.network.CoverageEngine
+                    .findBoosterUpstream(serverLevel, this);
+            upstreamTick = level.getGameTime();
+        }
+        return cachedUpstream;
+    }
+
+    public boolean canConfigure(net.minecraft.world.entity.player.Player player) {
+        var owner = installation.owner();
+        return !isRemoved() && level == player.level() && player.mayBuild()
+                && level.mayInteract(player, worldPosition)
+                && player.distanceToSqr(center()) <= 64
+                && (owner == null || owner.equals(player.getUUID()) || player.hasPermissions(2));
+    }
+
+    public void openMenu(net.minecraft.server.level.ServerPlayer player) {
+        if (!canConfigure(player)) {
+            player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                    "gui.mobilecellnetwork.booster.denied"), true);
+            return;
+        }
+        var options = com.example.mobilecellnetwork.gui.SignalBoosterMenu.options(player.serverLevel(), this);
+        player.openMenu(new net.minecraft.world.SimpleMenuProvider(
+                (id, inventory, user) -> new com.example.mobilecellnetwork.gui.SignalBoosterMenu(
+                        id, this, options),
+                net.minecraft.network.chat.Component.translatable("gui.mobilecellnetwork.signal_booster")),
+                buffer -> {
+                    buffer.writeBlockPos(worldPosition);
+                    buffer.writeCollection(options, (buf, option) -> option.write(buf));
+                });
+    }
+
     public void tick() {
-        if (level != null && !level.isClientSide && !InfrastructurePower.bypassed(level) && energy > 0) {
+        com.example.mobilecellnetwork.infrastructure.PowerWire.tick(this, installation, this);
+        if (level != null && !level.isClientSide && installation.ready()
+                && !InfrastructurePower.bypassed(level) && energy > 0) {
             energy--;
             poweredTick = level.getGameTime();
             setChanged();
@@ -67,7 +131,8 @@ public final class SignalBoosterBlockEntity extends BlockEntity implements IEner
     }
 
     public boolean isPowered() {
-        return level != null && (level.isClientSide ? displayPowered : (InfrastructurePower.bypassed(level) || energy > 0
+        return level != null && installation.ready()
+                && (level.isClientSide ? displayPowered : (InfrastructurePower.bypassed(level) || energy > 0
                 || poweredTick == level.getGameTime()));
     }
 
@@ -95,11 +160,15 @@ public final class SignalBoosterBlockEntity extends BlockEntity implements IEner
         CompoundTag tag = new CompoundTag();
         tag.putBoolean("powered", isPowered());
         tag.putInt("indicators", indicators());
+        tag.put("installation", installation.save());
+        tuning.save(tag);
         return tag;
     }
     @Override public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
         displayPowered = tag.getBoolean("powered");
         displayIndicators = tag.getInt("indicators");
+        installation.load(tag.getCompound("installation"));
+        tuning = com.example.mobilecellnetwork.infrastructure.BoosterTuning.load(tag);
     }
     @Override public void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet,
                                         HolderLookup.Provider registries) {
@@ -129,12 +198,16 @@ public final class SignalBoosterBlockEntity extends BlockEntity implements IEner
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        installation.load(tag.getCompound("installation"));
         energy = Math.clamp(tag.getInt("energy"), 0, CAPACITY);
+        tuning = com.example.mobilecellnetwork.infrastructure.BoosterTuning.load(tag);
     }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put("installation", installation.save());
         tag.putInt("energy", energy);
+        tuning.save(tag);
     }
 }
