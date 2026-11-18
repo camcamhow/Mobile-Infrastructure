@@ -3,6 +3,7 @@ package com.example.mobilecellnetwork.network;
 import com.example.mobilecellnetwork.capabilities.PhoneData;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 public final class ClientSmsCache {
     private static volatile List<PhoneData.Message> inbox = List.of();
@@ -43,6 +44,15 @@ public final class ClientSmsCache {
         sent = List.of();
         voicemail = List.of();
         missedCallCount = 0;
+    }
+
+    public static void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
+        clearSensitiveData();
+        TOASTS.clear();
+    }
+
+    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        clearSensitiveData();
         TOASTS.clear();
     }
 

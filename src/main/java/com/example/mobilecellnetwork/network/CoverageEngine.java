@@ -68,26 +68,53 @@ public final class CoverageEngine {
                 player.getData(ModCapabilities.PHONE_DATA));
     }
 
+    public static SignalResult measureRadio(ServerLevel level, Vec3 point, AntennaBlockEntity antenna,
+                                            boolean includeBoosters) {
+        // A technician instrument is independent of phone charge, plans and subscriptions.
+        return includeBoosters ? updateSignalAt(level, point, antenna, null, null)
+                : directSignalAt(level, point, antenna, null, null);
+    }
+
     private static SignalResult updateSignalAt(
             ServerLevel level, Vec3 playerPos, AntennaBlockEntity antenna, String planId,
             com.example.mobilecellnetwork.capabilities.PhoneData phoneData
     ) {
         SignalResult best = directSignalAt(level, playerPos, antenna, planId, phoneData);
         for (SignalBoosterBlockEntity booster : SignalBoosterBlockEntity.nearby(level, playerPos)) {
+            if (!booster.tuning().matches(antenna.getNetworkId())) continue;
+            if (!booster.tuning().automatic() && booster.upstream() != antenna) continue;
             SignalResult upstream = directSignalAt(level, booster.center(), antenna, planId, phoneData);
             if (upstream.tier() == SignalTier.NO_SERVICE) continue;
             double distance = playerPos.distanceTo(booster.center());
             LineOfSight.Result los = LineOfSight.compute(level, playerPos, booster.center());
-            double local = Math.max(0.0D, 1.0D - distance / SignalBoosterBlockEntity.RANGE
-                    - los.attenuation() * MobileCellNetworkConfig.LOS_WEIGHT.get());
-            double strength = Math.min(upstream.finalStrength(), local);
-            SignalTier tier = applyTierCap(strengthToTier(strength), upstream.tier());
+            double strength = com.example.mobilecellnetwork.infrastructure.BoosterReception.strength(
+                    upstream.finalStrength(), distance, SignalBoosterBlockEntity.RANGE,
+                    los.attenuation() * MobileCellNetworkConfig.LOS_WEIGHT.get());
+            SignalTier tier = cappedTier(strength, antenna, planId, phoneData);
             if (tier != SignalTier.NO_SERVICE && strength > best.finalStrength()) {
                 best = new SignalResult(tier, strength, distance, SignalBoosterBlockEntity.RANGE,
-                        local, los.attenuation(), los.sampleCount());
+                        Math.max(0, 1 - distance / SignalBoosterBlockEntity.RANGE),
+                        los.attenuation(), los.sampleCount());
             }
         }
         return best;
+    }
+
+    public record BoosterSignal(AntennaBlockEntity antenna, SignalResult signal) {}
+
+    public static List<BoosterSignal> boosterSignals(ServerLevel level, Vec3 point) {
+        return AntennaBlockEntity.loadedAntennas(level).stream()
+                .filter(CoverageEngine::isOperational)
+                .filter(antenna -> isNetworkAllowed(level, antenna) && isNetworkOnline(level, antenna))
+                .map(antenna -> new BoosterSignal(antenna, directSignalAt(level, point, antenna, null, null)))
+                .filter(candidate -> candidate.signal().tier() != SignalTier.NO_SERVICE)
+                .toList();
+    }
+
+    public static AntennaBlockEntity findBoosterUpstream(ServerLevel level, SignalBoosterBlockEntity booster) {
+        var best = booster.tuning().strongest(boosterSignals(level, booster.center()),
+                candidate -> candidate.antenna().getNetworkId(), candidate -> candidate.signal().finalStrength());
+        return best == null ? null : best.antenna();
     }
 
     private static SignalResult directSignalAt(
@@ -122,8 +149,13 @@ public final class CoverageEngine {
         LineOfSight.Result los = LineOfSight.compute(level, playerPos, antenna.center());
         double finalStrength = Math.max(0.0D,
                 baseStrength - los.attenuation() * MobileCellNetworkConfig.LOS_WEIGHT.get());
-        SignalTier tier = strengthToTier(finalStrength);
-        tier = applyTierCap(tier, antenna.getTier().maxSignalTier());
+        return new SignalResult(cappedTier(finalStrength, antenna, planId, phoneData),
+                finalStrength, distance, effectiveRange, baseStrength, los.attenuation(), los.sampleCount());
+    }
+
+    private static SignalTier cappedTier(double strength, AntennaBlockEntity antenna, String planId,
+                                         com.example.mobilecellnetwork.capabilities.PhoneData phoneData) {
+        SignalTier tier = applyTierCap(strengthToTier(strength), antenna.getMaxSignalTier());
         if (planId != null) {
             SignalTier planCap = PlanRegistry.getPlan(planId).maxSignalTier();
             tier = applyTierCap(tier, planCap);
@@ -135,8 +167,7 @@ public final class CoverageEngine {
         if (antenna.getPowerState() == AntennaPowerState.LOW_POWER) {
             tier = applyTierCap(tier, MobileCellNetworkConfig.LOW_POWER_MAX_TIER.get());
         }
-        return new SignalResult(tier, finalStrength, distance, effectiveRange, baseStrength,
-                los.attenuation(), los.sampleCount());
+        return tier;
     }
 
     public static SignalTier strengthToTier(double strength) {
@@ -588,13 +619,13 @@ public final class CoverageEngine {
     }
 
     private static double effectiveRange(AntennaBlockEntity antenna) {
-        double range = antenna.getTier().range();
+        double range = antenna.getRange();
         return antenna.getPowerState() == AntennaPowerState.LOW_POWER
                 ? range * MobileCellNetworkConfig.LOW_POWER_RANGE_MULTIPLIER.get() : range;
     }
 
     private static SignalTier effectiveTier(AntennaBlockEntity antenna) {
-        SignalTier tier = antenna.getTier().maxSignalTier();
+        SignalTier tier = antenna.getMaxSignalTier();
         if (antenna.getPowerState() == AntennaPowerState.LOW_POWER
                 && tier.ordinal() < MobileCellNetworkConfig.LOW_POWER_MAX_TIER.get().ordinal()) {
             return MobileCellNetworkConfig.LOW_POWER_MAX_TIER.get();
@@ -668,8 +699,8 @@ public final class CoverageEngine {
     }
 
     private static int configuredMaximumRange() {
-        return Math.max(MobileCellNetworkConfig.COPPER_RANGE.get(),
-                Math.max(MobileCellNetworkConfig.IRON_RANGE.get(), MobileCellNetworkConfig.DIAMOND_RANGE.get()));
+        return Math.max(1024, Math.max(MobileCellNetworkConfig.COPPER_RANGE.get(),
+                Math.max(MobileCellNetworkConfig.IRON_RANGE.get(), MobileCellNetworkConfig.DIAMOND_RANGE.get())));
     }
 
     public static void setFlashlight(ServerPlayer player, boolean on) {

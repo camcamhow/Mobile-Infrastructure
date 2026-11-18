@@ -66,7 +66,7 @@ public final class FaceTimeScreen extends Screen implements PhoneNavigableScreen
         } else if (ClientSignalCache.tier() == SignalTier.NO_SERVICE) {
             message = "No service.";
         } else {
-            PacketDistributor.sendToServer(new CallRequestPacket(target));
+            PacketDistributor.sendToServer(new CallRequestPacket(target, true));
             minecraft.setScreen(new CallScreen(menu, target));
         }
     }

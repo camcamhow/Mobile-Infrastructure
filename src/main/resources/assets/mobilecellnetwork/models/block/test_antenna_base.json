@@ -1,0 +1,26 @@
+{
+  "textures": {
+    "particle": "minecraft:block/light_gray_concrete",
+    "foundation": "minecraft:block/light_gray_concrete",
+    "metal": "minecraft:block/iron_block",
+    "cabinet": "mobilecellnetwork:block/antenna_dark"
+  },
+  "elements": [
+    {
+      "from": [1, 0, 1], "to": [15, 5, 15],
+      "faces": {
+        "down": { "texture": "#foundation" }, "up": { "texture": "#foundation" },
+        "north": { "texture": "#foundation" }, "south": { "texture": "#foundation" },
+        "west": { "texture": "#foundation" }, "east": { "texture": "#foundation" }
+      }
+    },
+    {
+      "from": [5, 5, 5], "to": [11, 13, 11],
+      "faces": {
+        "down": { "texture": "#cabinet" }, "up": { "texture": "#metal" },
+        "north": { "texture": "#cabinet" }, "south": { "texture": "#cabinet" },
+        "west": { "texture": "#cabinet" }, "east": { "texture": "#cabinet" }
+      }
+    }
+  ]
+}

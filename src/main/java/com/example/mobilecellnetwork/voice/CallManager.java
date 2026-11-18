@@ -40,6 +40,10 @@ public final class CallManager {
     }
 
     public static CallResult startCall(ServerPlayer caller, ServerPlayer callee) {
+        return startCall(caller, callee, false);
+    }
+
+    public static CallResult startCall(ServerPlayer caller, ServerPlayer callee, boolean videoCall) {
         if (caller.getUUID().equals(callee.getUUID())) {
             return reject(caller, CallResult.DECLINED, "You cannot call yourself.", "CALL_FAILED");
         }
@@ -72,7 +76,8 @@ public final class CallManager {
             warnLowMinutes(caller, callee);
         }
 
-        CallSession session = new CallSession(caller.getUUID(), callee.getUUID(), System.currentTimeMillis());
+        CallSession session = new CallSession(caller.getUUID(), callee.getUUID(),
+                System.currentTimeMillis(), videoCall);
         ACTIVE_CALLS.put(caller.getUUID(), session);
         ACTIVE_CALLS.put(callee.getUUID(), session);
         PLAYER_TO_PARTNER.put(caller.getUUID(), callee.getUUID());
@@ -94,6 +99,10 @@ public final class CallManager {
     }
 
     public static CallResult startCall(ServerPlayer caller, String phoneNumber) {
+        return startCall(caller, phoneNumber, false);
+    }
+
+    public static CallResult startCall(ServerPlayer caller, String phoneNumber, boolean videoCall) {
         UUID calleeId = NetworkSavedData.get(caller.server.overworld()).getUUIDForNumber(phoneNumber);
         if (calleeId == null) {
             return reject(caller, CallResult.DECLINED, "This number is not in service.", "NOT_IN_SERVICE");
@@ -102,7 +111,7 @@ public final class CallManager {
         if (callee == null) {
             return reject(caller, CallResult.DECLINED, "The player is unavailable.", "UNAVAILABLE");
         }
-        return startCall(caller, callee);
+        return startCall(caller, callee, videoCall);
     }
 
     public static void acceptCall(UUID playerId) {
@@ -427,7 +436,8 @@ public final class CallManager {
                                           CallSession.State state, String reason, boolean muted,
                                           boolean incoming) {
         PacketDistributor.sendToPlayer(recipient, new com.example.mobilecellnetwork.network.CallStatePacket(
-                session.id().toString(), state.name(), partner, reason, session.startTime(), muted, incoming));
+                session.id().toString(), state.name(), partner, reason, session.startTime(), muted, incoming,
+                session.videoCall()));
     }
 
     private static void sendStateToOnline(CallSession session, MinecraftServer server, String reason) {
@@ -439,19 +449,19 @@ public final class CallManager {
         if (caller != null) {
             PacketDistributor.sendToPlayer(caller, new com.example.mobilecellnetwork.network.CallStatePacket(
                     session.id().toString(), CallSession.State.ENDED.name(), "Player", reason,
-                    session.startTime(), session.callerMuted(), false));
+                    session.startTime(), session.callerMuted(), false, session.videoCall()));
         }
         if (callee != null) {
             PacketDistributor.sendToPlayer(callee, new com.example.mobilecellnetwork.network.CallStatePacket(
                     session.id().toString(), CallSession.State.ENDED.name(), "Player", reason,
-                    session.startTime(), session.calleeMuted(), true));
+                    session.startTime(), session.calleeMuted(), true, session.videoCall()));
         }
     }
 
     private static CallResult reject(ServerPlayer player, CallResult result, String message, String reason) {
         player.displayClientMessage(Component.literal(message), true);
         PacketDistributor.sendToPlayer(player, new com.example.mobilecellnetwork.network.CallStatePacket(
-                "", CallSession.State.ENDED.name(), "", reason + ":" + message, 0L, false, false));
+                "", CallSession.State.ENDED.name(), "", reason + ":" + message, 0L, false, false, false));
         return result;
     }
 

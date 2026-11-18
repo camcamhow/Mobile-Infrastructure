@@ -32,6 +32,8 @@ public final class VideoCallClient {
     private static boolean enabled;
     private static CameraType previousCamera;
     private static byte[] remote = new byte[0];
+    private static volatile byte[] local = new byte[0];
+    private static volatile long localVersion;
     private static long remoteVersion;
     private static long remoteAt;
     private static String remoteSession = "";
@@ -44,6 +46,15 @@ public final class VideoCallClient {
 
     public static boolean enabled() {
         return enabled;
+    }
+
+    public static boolean hasRemoteVideo() {
+        return remote.length > 0 && remoteSession.equals(ClientCallCache.sessionId())
+                && System.currentTimeMillis() - remoteAt < 3_000L;
+    }
+
+    public static boolean hasVideo() {
+        return enabled || hasRemoteVideo();
     }
 
     public static void toggle() {
@@ -85,14 +96,25 @@ public final class VideoCallClient {
     }
 
     public static void drawRemote(GuiGraphics graphics, int x, int y, int width, int height) {
-        if (remote.length > 0 && remoteSession.equals(ClientCallCache.sessionId())
-                && System.currentTimeMillis() - remoteAt < 3_000L) {
+        if (hasRemoteVideo()) {
             graphics.flush();
             PhonePhotoLibrary.drawVersionedThumbnail(graphics, "video-call-" + remoteVersion,
                     remote, x, y, width, height);
         } else {
             graphics.drawCenteredString(Minecraft.getInstance().font, "Their camera is off", x + width / 2,
                     y + height / 2 - 4, 0xFFFFFFFF);
+        }
+    }
+
+    public static void drawLocal(GuiGraphics graphics, int x, int y, int width, int height) {
+        byte[] image = local;
+        if (image.length > 0) {
+            graphics.flush();
+            PhonePhotoLibrary.drawVersionedThumbnail(graphics, "video-call-local-" + localVersion,
+                    image, x, y, width, height);
+        } else {
+            graphics.drawCenteredString(Minecraft.getInstance().font, "Starting camera...",
+                    x + width / 2, y + height / 2 - 4, 0xFFFFFFFF);
         }
     }
 
@@ -127,6 +149,7 @@ public final class VideoCallClient {
         previousCamera = null;
         enabled = false;
         session = null;
+        local = new byte[0];
         if (target != null) {
             target.destroyBuffers();
             target = null;
@@ -190,8 +213,9 @@ public final class VideoCallClient {
             if (image.length > VideoCallPacket.MAX_BYTES) throw new IOException("Video frame too large");
             Minecraft.getInstance().execute(() -> {
                 if (enabled && generation == capturedGeneration && id.equals(session)
-                        && ClientCallCache.state() == CallSession.State.ACTIVE
-                        && Minecraft.getInstance().screen instanceof CallScreen) {
+                        && ClientCallCache.state() == CallSession.State.ACTIVE) {
+                    local = image;
+                    localVersion++;
                     PacketDistributor.sendToServer(new VideoCallPacket(id, true, false, image));
                 }
             });

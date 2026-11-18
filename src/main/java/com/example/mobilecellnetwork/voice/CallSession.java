@@ -6,6 +6,7 @@ public final class CallSession {
     private final UUID id = UUID.randomUUID();
     private final UUID callerUUID;
     private final UUID calleeUUID;
+    private final boolean videoCall;
     private long startTime;
     private State state = State.RINGING;
     private boolean callerMuted;
@@ -18,14 +19,20 @@ public final class CallSession {
     private int ticksElapsed;
 
     public CallSession(UUID callerUUID, UUID calleeUUID, long startTime) {
+        this(callerUUID, calleeUUID, startTime, false);
+    }
+
+    public CallSession(UUID callerUUID, UUID calleeUUID, long startTime, boolean videoCall) {
         this.callerUUID = callerUUID;
         this.calleeUUID = calleeUUID;
         this.startTime = startTime;
+        this.videoCall = videoCall;
     }
 
     public UUID id() { return id; }
     public UUID callerUUID() { return callerUUID; }
     public UUID calleeUUID() { return calleeUUID; }
+    public boolean videoCall() { return videoCall; }
     public long startTime() { return startTime; }
     public void setStartTime(long startTime) { this.startTime = startTime; }
     public State state() { return state; }
